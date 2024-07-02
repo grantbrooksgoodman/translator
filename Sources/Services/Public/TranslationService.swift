@@ -1,0 +1,165 @@
+//
+//  TranslationService.swift
+//
+//  Created by Grant Brooks Goodman.
+//  Copyright © NEOTechnica Corporation. All rights reserved.
+//
+
+/* Native */
+import Foundation
+
+public struct TranslationService {
+    // MARK: - Type Aliases
+
+    private typealias Strings = Constants.Strings.Core
+
+    // MARK: - Properties
+
+    public static let shared = TranslationService()
+
+    // MARK: - Init
+
+    private init() {}
+
+    // MARK: - Translate
+
+    public func translate(
+        _ input: TranslationInput,
+        languagePair: LanguagePair
+    ) async -> Result<Translation, TranslationError> {
+        let translateWithGoogleResult = await translate(
+            input,
+            languagePair: languagePair,
+            platform: .google
+        )
+
+        switch translateWithGoogleResult {
+        case let .success(translation):
+            return .success(translation)
+
+        case .failure:
+            let translateWithDeepLResult = await translate(
+                input,
+                languagePair: languagePair,
+                platform: .deepL
+            )
+
+            switch translateWithDeepLResult {
+            case let .success(translation):
+                return .success(translation)
+
+            case .failure:
+                let translateWithReversoResult = await translate(
+                    input,
+                    languagePair: languagePair,
+                    platform: .reverso
+                )
+
+                switch translateWithReversoResult {
+                case let .success(translation):
+                    return .success(translation)
+
+                case let .failure(error):
+                    return .failure(error)
+                }
+            }
+        }
+    }
+
+    private func translate(
+        _ input: TranslationInput,
+        languagePair: LanguagePair,
+        platform: TranslationPlatform
+    ) async -> Result<Translation, TranslationError> {
+        guard input.isWellFormed,
+              languagePair.isWellFormed else { return .failure(.invalidArguments) }
+
+        let hasUnicodeLetters = input.value.rangeOfCharacter(from: .letters) != nil
+        let sameInputOutputLanguage = await LanguageRecognitionService.shared.matchConfidence(for: input.value, inLanguage: languagePair.to) > 0.8
+
+        if !hasUnicodeLetters || languagePair.isIdempotent || sameInputOutputLanguage {
+            return .success(.init(
+                input: input,
+                output: input.value,
+                languagePair: languagePair
+            ))
+        }
+
+        if let archivedTranslation = LocalTranslationArchiver.shared.getValue(
+            input: input,
+            languagePair: languagePair
+        ) ?? LocalTranslationArchiver.shared.getValue(
+            input: .init(input.value.trimmingTrailingWhitespaceAndNewlines),
+            languagePair: languagePair
+        ) {
+            guard archivedTranslation.isWellFormed else {
+                LocalTranslationArchiver.shared.clearArchive()
+                return await translate(input, languagePair: languagePair, platform: platform)
+            }
+
+            return .success(.init(
+                input: input,
+                output: archivedTranslation.output,
+                languagePair: languagePair
+            ))
+        }
+
+        let inputTokens = input.value.tokenized(delimiter: Strings.processingDelimiter)
+        let translateResult = await platform.instance.translate(
+            .init(inputTokens.processed.trimmingTrailingWhitespaceAndNewlines),
+            languagePair: languagePair
+        )
+
+        switch translateResult {
+        case let .success(translation):
+            if !inputTokens.slices.isEmpty,
+               !translation.output.contains(Strings.processingToken) {
+                return .failure(.malformedTranslationResult)
+            }
+
+            let processedOutput = translation
+                .output
+                .replacing(token: Strings.processingToken, with: inputTokens.slices)
+                .replacingOccurrences(of: Strings.processingToken, with: "")
+                .replacingOccurrences(of: Strings.processingDelimiter, with: "")
+                .trimmingTrailingWhitespaceAndNewlines
+                .capitalized(relativeTo: input.value)
+
+            let processedTranslation: Translation = .init(
+                input: input,
+                output: processedOutput,
+                languagePair: translation.languagePair
+            )
+
+            guard processedTranslation.isWellFormed else { return .failure(.malformedTranslationResult) }
+            LocalTranslationArchiver.shared.addValue(processedTranslation)
+            return .success(processedTranslation)
+
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    // MARK: - Get Translations
+
+    public func getTranslations(
+        _ inputs: [TranslationInput],
+        languagePair: LanguagePair
+    ) async -> Result<[Translation], TranslationError> {
+        var translations = [Translation]()
+
+        for input in inputs {
+            let translateResult = await translate(input, languagePair: languagePair)
+
+            switch translateResult {
+            case let .success(translation):
+                translations.append(translation)
+
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+
+        return .success(translations)
+    }
+}
