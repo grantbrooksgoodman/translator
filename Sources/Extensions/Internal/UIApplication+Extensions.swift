@@ -13,7 +13,8 @@ extension UIApplication {
     var keyWindow: UIWindow? {
         connectedScenes
             .first(where: { $0 is UIWindowScene })
-            .flatMap { $0 as? UIWindowScene }?.windows
+            .flatMap { $0 as? UIWindowScene }?
+            .windows
             .first(where: \.isKeyWindow)
     }
 

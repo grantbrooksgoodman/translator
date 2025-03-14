@@ -81,6 +81,7 @@ public struct TranslationService {
         languagePair: LanguagePair,
         platform: TranslationPlatform
     ) async -> Result<Translation, TranslationError> {
+        let input = input.withTaggedDetectorAttributes
         guard input.isWellFormed,
               languagePair.isWellFormed else { return .failure(.invalidArguments) }
 

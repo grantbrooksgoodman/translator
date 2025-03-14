@@ -10,18 +10,22 @@ import Foundation
 import NaturalLanguage
 import UIKit
 
-struct LanguageRecognitionService {
+public struct LanguageRecognitionService {
     // MARK: - Properties
 
-    static let shared = LanguageRecognitionService()
+    public static let shared = LanguageRecognitionService()
 
     private let nlLanguageRecognizer: NLLanguageRecognizer = .init()
     private let uiTextChecker: UITextChecker = .init()
 
+    // MARK: - Init
+
+    private init() {}
+
     // MARK: - Methods
 
     @MainActor
-    func matchConfidence(for string: String, inLanguage languageCode: String) -> Float {
+    public func matchConfidence(for string: String, inLanguage languageCode: String) -> Float {
         func sanitized(_ string: String) -> String { string.lowercasedTrimmingWhitespaceAndNewlines }
 
         var confidenceValue: Float = 0
