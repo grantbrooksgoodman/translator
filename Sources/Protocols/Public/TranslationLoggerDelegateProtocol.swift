@@ -10,5 +10,11 @@ import Foundation
 
 // swiftlint:disable:next class_delegate_protocol
 public protocol TranslationLoggerDelegate {
-    func log(_ text: String, metadata: [Any])
+    func log(
+        _ text: String,
+        sender: Any,
+        fileName: String,
+        function: String,
+        line: Int
+    )
 }

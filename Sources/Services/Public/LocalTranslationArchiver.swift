@@ -64,7 +64,13 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
             let decoded: [Translation] = try jsonDecoder.decode([Translation].self, from: data)
             return decoded
         } catch {
-            Config.shared.loggerDelegate?.log(Translator.descriptor(error), metadata: [self, #file, #function, #line])
+            Config.shared.loggerDelegate?.log(
+                Translator.descriptor(error),
+                sender: self,
+                fileName: #fileID,
+                function: #function,
+                line: #line
+            )
             return []
         }
     }
@@ -76,7 +82,13 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
             let encoded: Data = try jsonEncoder.encode(archive)
             UserDefaults.standard.set(encoded, forKey: Strings.archiveUserDefaultsKey)
         } catch {
-            Config.shared.loggerDelegate?.log(Translator.descriptor(error), metadata: [self, #file, #function, #line])
+            Config.shared.loggerDelegate?.log(
+                Translator.descriptor(error),
+                sender: self,
+                fileName: #fileID,
+                function: #function,
+                line: #line
+            )
         }
     }
 }

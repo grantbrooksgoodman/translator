@@ -192,7 +192,10 @@ extension BaseTranslator: WKNavigationDelegate {
     ) {
         Config.shared.loggerDelegate?.log(
             "Web view failed navigation: \(Translator.descriptor(error))",
-            metadata: [self, #file, #function, #line]
+            sender: self,
+            fileName: #fileID,
+            function: #function,
+            line: #line
         )
 
         setTranslationResult(.failure(
@@ -209,7 +212,10 @@ extension BaseTranslator: WKNavigationDelegate {
     ) {
         Config.shared.loggerDelegate?.log(
             "Web view failed provisional navigation: \(Translator.descriptor(error))",
-            metadata: [self, #file, #function, #line]
+            sender: self,
+            fileName: #fileID,
+            function: #function,
+            line: #line
         )
 
         setTranslationResult(.failure(
@@ -227,7 +233,10 @@ extension BaseTranslator: WKNavigationDelegate {
 
         Config.shared.loggerDelegate?.log(
             "Web view finished navigation.",
-            metadata: [self, #file, #function, #line]
+            sender: self,
+            fileName: #fileID,
+            function: #function,
+            line: #line
         )
 
         // Click to agree to cookie settings.
