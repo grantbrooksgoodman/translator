@@ -8,7 +8,7 @@
 /* Native */
 import Foundation
 
-enum TranslationPlatform: Codable, Equatable {
+public enum TranslationPlatform: Codable, CaseIterable, Equatable {
     // MARK: - Type Aliases
 
     private typealias Strings = Constants.Strings.TranslationPlatform

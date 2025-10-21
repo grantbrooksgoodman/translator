@@ -76,7 +76,7 @@ public struct TranslationService {
         }
     }
 
-    private func translate(
+    public func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair,
         platform: TranslationPlatform
@@ -87,7 +87,7 @@ public struct TranslationService {
 
         let translationArchiver = Config.shared.archiverDelegate ?? LocalTranslationArchiver.shared
 
-        let hasUnicodeLetters = input.value.rangeOfCharacter(from: .letters) != nil
+        let hasUnicodeLetters = input.value.containsLetters
         let sameInputOutputLanguage = await LanguageRecognitionService.shared.matchConfidence(for: input.value, inLanguage: languagePair.to) > 0.8
 
         if !hasUnicodeLetters || languagePair.isIdempotent || sameInputOutputLanguage {
