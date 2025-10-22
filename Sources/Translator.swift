@@ -56,9 +56,13 @@ public extension Translator {
         typealias Strings = Constants.Strings.Core
 
         guard let userInfo = error._userInfo as? NSDictionary,
-              let javaScriptErrorMessage = userInfo[Strings.javaScriptExceptionMessageErrorUserInfoKey] as? String else { return descriptor(error as NSError) }
+              let errorMessage = userInfo[
+                  Strings.javaScriptExceptionMessageErrorUserInfoKey
+              ] as? String ?? userInfo[
+                  Strings.nsHelpAnchorErrorUserInfoKey
+              ] as? String else { return descriptor(error as NSError) }
 
-        return "\(javaScriptErrorMessage) (\((error as NSError).code))"
+        return "\(errorMessage) (\((error as NSError).code))"
     }
 }
 
@@ -74,6 +78,7 @@ enum Constants {
             public static let googleConsentJavaScriptString = "document.getElementsByClassName('VfPpkd-RLmnJb')[3].click();"
             public static let googleConsentURLString = "https://consent.google.com/"
             public static let javaScriptExceptionMessageErrorUserInfoKey = "WKJavaScriptExceptionMessage"
+            public static let nsHelpAnchorErrorUserInfoKey = "NSHelpAnchor"
             public static let processingDelimiter = "⌘"
             public static let processingToken = "⁂"
         }

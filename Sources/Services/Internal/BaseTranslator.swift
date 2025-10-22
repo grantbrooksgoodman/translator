@@ -15,7 +15,7 @@ class BaseTranslator: NSObject {
 
     private(set) var translationInput: TranslationInput?
     private(set) var translationLanguagePair: LanguagePair?
-    private(set) var webView: WKWebView?
+    private(set) var webView: StaticWebView?
 
     private let platform: TranslationPlatform
 
@@ -69,6 +69,7 @@ class BaseTranslator: NSObject {
 
         clearCookies()
         initializeWebView()
+        if platform != .deepL { addTrimLazyLoadersScript() }
         dispatchGroup = .init()
 
         timeout = Timeout(after: .seconds(10)) { self.setTranslationResult(.failure(.timedOut)) }
@@ -177,12 +178,52 @@ class BaseTranslator: NSObject {
 
         guard let webView else { return }
         webView.alpha = 0
+        webView.isUserInteractionEnabled = false
         webView.navigationDelegate = self
+
+        webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+
+        addBlockContentFocusScript()
+        addContentSecurityPolicyScript()
+        addDenyPermissionsScript()
+        addDisableAnimationsScript()
+        addDisableServiceWorkerScript()
+        addFauxVisibilityScript()
+        addPromoteIdleCallbackScript()
+
+        enableBlockThirdPartyCookiesRule()
+        enableNoImagesRule()
+        enableNoFontsRule()
+
         UIApplication.shared.keyWindow?.addSubview(webView)
     }
 }
 
 extension BaseTranslator: WKNavigationDelegate {
+    // MARK: - Create Web View with Configuration
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        return nil
+    }
+
+    // MARK: - Dedice Policy for Navigation Response
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        // Only ever allow HTML/text; cancel images, gifs, pdfs, etc.
+        let mimeType = navigationResponse.response.mimeType?.lowercased() ?? ""
+        let allowedTypes = mimeType.contains("text/html") || mimeType.contains("application/xhtml+xml")
+        decisionHandler(allowedTypes ? .allow : .cancel)
+    }
+
     // MARK: - Did Fail Navigation
 
     func webView(
@@ -261,4 +302,30 @@ extension BaseTranslator: WKNavigationDelegate {
         let urlCredential: URLCredential = .init(trust: serverTrust)
         DispatchQueue.global(qos: .userInteractive).async { completionHandler(.useCredential, urlCredential) }
     }
+
+    // MARK: - Navigation Action Did Become Download
+
+    func webView(
+        _ webView: WKWebView,
+        navigationAction: WKNavigationAction,
+        didBecome download: WKDownload
+    ) {
+        download.cancel()
+    }
+
+    // MARK: - Navigation Response Did Become Download
+
+    func webView(
+        _ webView: WKWebView,
+        navigationResponse: WKNavigationResponse,
+        didBecome download: WKDownload
+    ) {
+        download.cancel()
+    }
+}
+
+final class StaticWebView: WKWebView {
+    override var canBecomeFirstResponder: Bool { false }
+    override var inputAccessoryView: UIView? { UIView(frame: .zero) }
+    override var inputView: UIView? { UIView(frame: .zero) }
 }
