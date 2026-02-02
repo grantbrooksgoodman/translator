@@ -8,7 +8,7 @@
 /* Native */
 import Foundation
 
-public struct Translation: Codable, Equatable {
+public struct Translation: Codable, Hashable {
     // MARK: - Properties
 
     public let input: TranslationInput

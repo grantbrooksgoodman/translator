@@ -20,9 +20,13 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
 
     public static let shared = LocalTranslationArchiver()
 
+    private let defaults = UserDefaults.standard
+    private let jsonDecoder = JSONDecoder()
+    private let jsonEncoder = JSONEncoder()
+
     // MARK: - Computed Properties
 
-    private var archive: [Translation] {
+    private var archive: Set<Translation> {
         get { getArchive() }
         set { setArchive(newValue) }
     }
@@ -34,14 +38,22 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
     // MARK: - Addition
 
     public func addValue(_ translation: Translation) {
-        archive.removeAll(where: { $0 == translation })
-        archive.append(translation)
+        archive.insert(translation)
+    }
+
+    public func addValues(_ translations: Set<Translation>) {
+        archive.formUnion(translations)
     }
 
     // MARK: - Retrieval
 
-    public func getValue(inputValueEncodedHash hash: String, languagePair: LanguagePair) -> Translation? {
-        archive.first(where: { $0.input.value.encodedHash == hash && $0.languagePair.to == languagePair.to })
+    public func getValue(
+        inputValueEncodedHash hash: String,
+        languagePair: LanguagePair
+    ) -> Translation? {
+        archive.first(where: {
+            $0.input.value.encodedHash == hash && $0.languagePair.to == languagePair.to
+        })
     }
 
     // MARK: - Removal
@@ -50,19 +62,30 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
         archive = []
     }
 
-    public func removeValue(inputValueEncodedHash hash: String, languagePair: LanguagePair) {
-        archive.removeAll(where: { $0.input.value.encodedHash == hash && $0.languagePair.to == languagePair.to })
+    public func removeValue(
+        inputValueEncodedHash hash: String,
+        languagePair: LanguagePair
+    ) {
+        if let value = getValue(
+            inputValueEncodedHash: hash,
+            languagePair: languagePair
+        ) {
+            archive.remove(value)
+        }
     }
 
     // MARK: - Auxiliary
 
-    private func getArchive() -> [Translation] {
-        guard let data = UserDefaults.standard.object(forKey: Strings.archiveUserDefaultsKey) as? Data else { return [] }
-        let jsonDecoder = JSONDecoder()
+    private func getArchive() -> Set<Translation> {
+        guard let data = defaults.object(
+            forKey: Strings.archiveUserDefaultsKey
+        ) as? Data else { return [] }
 
         do {
-            let decoded: [Translation] = try jsonDecoder.decode([Translation].self, from: data)
-            return decoded
+            return try jsonDecoder.decode(
+                Set<Translation>.self,
+                from: data
+            )
         } catch {
             Config.shared.loggerDelegate?.log(
                 Translator.descriptor(error),
@@ -75,12 +98,12 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate {
         }
     }
 
-    private func setArchive(_ archive: [Translation]) {
-        let jsonEncoder = JSONEncoder()
-
+    private func setArchive(_ archive: Set<Translation>) {
         do {
-            let encoded: Data = try jsonEncoder.encode(archive)
-            UserDefaults.standard.set(encoded, forKey: Strings.archiveUserDefaultsKey)
+            try defaults.set(
+                jsonEncoder.encode(archive),
+                forKey: Strings.archiveUserDefaultsKey
+            )
         } catch {
             Config.shared.loggerDelegate?.log(
                 Translator.descriptor(error),

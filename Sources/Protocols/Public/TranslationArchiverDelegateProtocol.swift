@@ -14,13 +14,21 @@ public protocol TranslationArchiverDelegate {
 
     func addValue(_ translation: Translation)
 
+    func addValues(_ translations: Set<Translation>)
+
     // MARK: - Get Value
 
-    func getValue(inputValueEncodedHash hash: String, languagePair: LanguagePair) -> Translation?
+    func getValue(
+        inputValueEncodedHash hash: String,
+        languagePair: LanguagePair
+    ) -> Translation?
 
     // MARK: - Remove Value
 
-    func removeValue(inputValueEncodedHash hash: String, languagePair: LanguagePair)
+    func removeValue(
+        inputValueEncodedHash hash: String,
+        languagePair: LanguagePair
+    )
 
     // MARK: - Clear Archive
 
