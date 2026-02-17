@@ -16,11 +16,11 @@ public extension String {
     var containsLetters: Bool {
         unicodeScalars.contains { scalar in
             CharacterSet.letters.contains(scalar)
-                && !(CharacterSet.symbols.contains(scalar)
+                && !(CharacterSet.controlCharacters.contains(scalar)
+                    || CharacterSet.illegalCharacters.contains(scalar)
                     || CharacterSet.nonBaseCharacters.contains(scalar)
-                    || CharacterSet.controlCharacters.contains(scalar)
                     || CharacterSet.punctuationCharacters.contains(scalar)
-                    || CharacterSet.illegalCharacters.contains(scalar))
+                    || CharacterSet.symbols.contains(scalar))
         }
     }
 }

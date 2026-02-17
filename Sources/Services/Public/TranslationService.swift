@@ -162,21 +162,66 @@ public struct TranslationService {
         _ inputs: [TranslationInput],
         languagePair: LanguagePair
     ) async -> Result<[Translation], TranslationError> {
-        var translations = [Translation]()
+        guard !inputs.isEmpty,
+              inputs.allSatisfy(\.isWellFormed),
+              languagePair.isWellFormed else { return .failure(.invalidArguments) }
 
-        for input in inputs {
-            let translateResult = await translate(input, languagePair: languagePair)
+        // Pre-allocate result slots to preserve order.
+        var translations: [Translation?] = Array(
+            repeating: nil,
+            count: inputs.count
+        )
 
-            switch translateResult {
-            case let .success(translation):
-                translations.append(translation)
+        return await withTaskGroup(
+            of: (Int, Result<Translation, TranslationError>).self
+        ) { taskGroup in
+            var error: TranslationError?
+            var nextIndex = 0
 
-            case let .failure(error):
-                return .failure(error)
+            func enqueueNextTask() {
+                guard nextIndex < inputs.count else { return }
+                let index = nextIndex
+                nextIndex += 1
+
+                taskGroup.addTask {
+                    let translateResult = await translate(
+                        inputs[index],
+                        languagePair: languagePair
+                    )
+
+                    return (index, translateResult)
+                }
             }
-        }
 
-        return .success(translations)
+            let maxConcurrentOperations = min(
+                10,
+                inputs.count
+            )
+
+            for _ in 0 ..< maxConcurrentOperations { enqueueNextTask() }
+
+            // As each task finishes, enqueue another until done.
+            while let (index, result) = await taskGroup.next() {
+                switch result {
+                case let .success(translation):
+                    translations[index] = translation
+                    enqueueNextTask()
+
+                case let .failure(_error):
+                    error = _error
+                    taskGroup.cancelAll()
+                }
+            }
+
+            if let error { return .failure(error) }
+            guard translations.allSatisfy({ $0 != nil }) else {
+                return .failure(.unknown(
+                    "Batch translation results were incomplete."
+                ))
+            }
+
+            return .success(translations.compactMap(\.self))
+        }
     }
 }
 
