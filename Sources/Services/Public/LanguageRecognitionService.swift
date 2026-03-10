@@ -24,11 +24,14 @@ public struct LanguageRecognitionService {
 
     // MARK: - Methods
 
-    @MainActor
-    public func matchConfidence(for string: String, inLanguage languageCode: String) -> Float {
+    public func matchConfidence(
+        for string: String,
+        inLanguage languageCode: String
+    ) async -> Float {
         func sanitized(_ string: String) -> String { string.lowercasedTrimmingWhitespaceAndNewlines }
 
         var confidenceValue: Float = 0
+        nlLanguageRecognizer.reset()
         nlLanguageRecognizer.processString(string)
 
         if let dominantLanguageCode = nlLanguageRecognizer.dominantLanguage?.rawValue,
@@ -42,14 +45,21 @@ public struct LanguageRecognitionService {
             confidenceValue += 0.4
         }
 
-        if isValidSentence(string, languageCode: languageCode) {
+        if await isValidSentence(
+            string,
+            languageCode: languageCode
+        ) {
             confidenceValue += 0.2
         }
 
         return confidenceValue
     }
 
-    private func isValidSentence(_ string: String, languageCode: String) -> Bool {
+    @MainActor
+    private func isValidSentence(
+        _ string: String,
+        languageCode: String
+    ) -> Bool {
         func isMisspelled(_ word: String) -> Bool {
             uiTextChecker.rangeOfMisspelledWord(
                 in: word,
@@ -60,10 +70,40 @@ public struct LanguageRecognitionService {
             ).location != NSNotFound
         }
 
-        let results = string.components(separatedBy: .whitespaces).reduce(into: [Bool]()) { partialResult, word in
-            partialResult.append(isMisspelled(word))
+        func shouldCheck(_ word: Substring) -> Bool {
+            // Skip tiny words, numbers, URLs-ish, and punctuation-heavy tokens.
+            guard word.count >= 3,
+                  !word.contains(where: \.isNumber),
+                  !word.contains("://"),
+                  !word.contains(".") else { return false }
+            return word.contains(where: \.isLetter)
         }
 
-        return results.filter { !$0 }.count > results.filter { $0 }.count
+        var checkedWords = 0
+        var misspelledWords = 0
+        var validWords = 0
+
+        let splitString = string.split(whereSeparator: \.isWhitespace)
+        for token in splitString {
+            guard shouldCheck(token) else { continue }
+            checkedWords += 1
+
+            let word = String(token)
+            switch isMisspelled(word) {
+            case true: misspelledWords += 1
+            case false: validWords += 1
+            }
+
+            if checkedWords >= splitString.count / 3 {
+                if validWords >= misspelledWords + 2 { return true }
+                if misspelledWords >= validWords + 2 { return false }
+            }
+
+            if checkedWords >= (splitString.count * (3 / 4)) { break }
+        }
+
+        // If we couldn't check anything meaningful, don't penalize.
+        guard checkedWords > 0 else { return true }
+        return validWords >= misspelledWords
     }
 }
