@@ -10,13 +10,19 @@ import Foundation
 import NaturalLanguage
 import UIKit
 
-public struct LanguageRecognitionService {
+public final class LanguageRecognitionService {
+    // MARK: - Types
+
+    private struct CacheKey: Hashable {
+        let string: String
+        let languageCode: String
+    }
+
     // MARK: - Properties
 
     public static let shared = LanguageRecognitionService()
 
-    private let nlLanguageRecognizer: NLLanguageRecognizer = .init()
-    private let uiTextChecker: UITextChecker = .init()
+    private var cachedResults = [CacheKey: Float]()
 
     // MARK: - Init
 
@@ -28,18 +34,27 @@ public struct LanguageRecognitionService {
         for string: String,
         inLanguage languageCode: String
     ) async -> Float {
+        let cacheKey = CacheKey(
+            string: string,
+            languageCode: languageCode
+        )
+
+        if let cachedValue = cachedResults[cacheKey] {
+            return cachedValue
+        }
+
         func sanitized(_ string: String) -> String { string.lowercasedTrimmingWhitespaceAndNewlines }
 
+        let languageRecognizer = NLLanguageRecognizer()
         var confidenceValue: Float = 0
-        nlLanguageRecognizer.reset()
-        nlLanguageRecognizer.processString(string)
+        languageRecognizer.processString(string)
 
-        if let dominantLanguageCode = nlLanguageRecognizer.dominantLanguage?.rawValue,
+        if let dominantLanguageCode = languageRecognizer.dominantLanguage?.rawValue,
            sanitized(dominantLanguageCode).hasPrefix(sanitized(languageCode)) {
             confidenceValue += 0.4
         }
 
-        if let dominantHypothesis = nlLanguageRecognizer.languageHypotheses(withMaximum: 1).first,
+        if let dominantHypothesis = languageRecognizer.languageHypotheses(withMaximum: 1).first,
            sanitized(dominantHypothesis.key.rawValue).hasPrefix(sanitized(languageCode)),
            dominantHypothesis.value >= 0.45 {
             confidenceValue += 0.4
@@ -52,6 +67,7 @@ public struct LanguageRecognitionService {
             confidenceValue += 0.2
         }
 
+        cachedResults[cacheKey] = confidenceValue
         return confidenceValue
     }
 
@@ -61,7 +77,7 @@ public struct LanguageRecognitionService {
         languageCode: String
     ) -> Bool {
         func isMisspelled(_ word: String) -> Bool {
-            uiTextChecker.rangeOfMisspelledWord(
+            UITextChecker().rangeOfMisspelledWord(
                 in: word,
                 range: .init(location: 0, length: word.utf16.count),
                 startingAt: 0,
@@ -99,7 +115,7 @@ public struct LanguageRecognitionService {
                 if misspelledWords >= validWords + 2 { return false }
             }
 
-            if checkedWords >= (splitString.count * (3 / 4)) { break }
+            if checkedWords >= Int(Double(splitString.count) * 3 / 4) { break }
         }
 
         // If we couldn't check anything meaningful, don't penalize.
