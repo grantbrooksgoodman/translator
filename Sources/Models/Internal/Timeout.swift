@@ -8,6 +8,7 @@
 /* Native */
 import Foundation
 
+@MainActor
 final class Timeout {
     // MARK: - Properties
 
@@ -21,14 +22,12 @@ final class Timeout {
         callback: @escaping () -> Void
     ) {
         self.callback = callback
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(duration.milliseconds))) {
-            guard self.isValid else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard let self,
+                  self.isValid else { return }
             self.invoke()
         }
-    }
-
-    deinit {
-        cancel()
     }
 
     // MARK: - Cancellation

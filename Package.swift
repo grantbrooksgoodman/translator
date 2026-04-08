@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.0
 
 /* Native */
 import PackageDescription
@@ -29,5 +29,6 @@ let package = Package(
             path: "Sources",
             plugins: [ /* .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint") */ ]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )

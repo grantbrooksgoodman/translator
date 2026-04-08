@@ -8,7 +8,7 @@
 /* Native */
 import Foundation
 
-public struct TranslationService {
+public struct TranslationService: Sendable {
     // MARK: - Type Aliases
 
     private typealias Strings = Constants.Strings.Core

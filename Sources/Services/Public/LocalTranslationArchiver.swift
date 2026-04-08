@@ -11,7 +11,7 @@ import Foundation
 // TODO: Ensure using languagePair.to is the correct logic path. Requires some thought.
 // TODO: Use different suite for UserDefaults.
 
-public final class LocalTranslationArchiver: TranslationArchiverDelegate {
+public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unchecked Sendable {
     // MARK: - Type Aliases
 
     private typealias Strings = Constants.Strings.LocalTranslationArchiver

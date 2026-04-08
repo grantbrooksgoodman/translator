@@ -8,7 +8,7 @@
 /* Native */
 import Foundation
 
-public enum TranslationPlatform: Codable, CaseIterable, Equatable {
+public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     // MARK: - Type Aliases
 
     private typealias Strings = Constants.Strings.TranslationPlatform
@@ -34,6 +34,7 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable {
         }
     }
 
+    @MainActor
     var instance: any Translatorable {
         switch self {
         case .deepL: DeepLTranslator()

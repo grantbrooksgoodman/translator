@@ -99,7 +99,7 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
     /// Necessary to avoid async/await here due to crashing bug in evaluating JavaScript with no return values.
     /// https://forums.developer.apple.com/forums/thread/701553
-    private func restoreLanguagePairIfNeeded(completion: @escaping (Bool) -> Void) {
+    private func restoreLanguagePairIfNeeded(completion: @escaping @Sendable (Bool) -> Void) {
         webView?.evaluateJavaScript("document.getElementsByClassName('original-language-pair-link')[0].click();") { _, error in
             guard error == nil else { return completion(false) }
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) { completion(true) }

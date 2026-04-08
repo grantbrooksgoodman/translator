@@ -9,7 +9,7 @@
 import Foundation
 
 // swiftlint:disable:next class_delegate_protocol
-public protocol TranslationLoggerDelegate {
+public protocol TranslationLoggerDelegate: Sendable {
     func log(
         _ text: String,
         sender: Any,

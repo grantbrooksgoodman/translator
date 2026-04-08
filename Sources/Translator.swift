@@ -23,7 +23,7 @@ public struct Translator {
 public extension Translator {
     /* MARK: Types */
 
-    final class Config {
+    final class Config: @unchecked Sendable {
         /* MARK: Properties */
 
         public static let shared = Config()

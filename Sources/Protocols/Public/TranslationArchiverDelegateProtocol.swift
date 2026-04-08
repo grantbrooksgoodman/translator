@@ -9,7 +9,7 @@
 import Foundation
 
 // swiftlint:disable:next class_delegate_protocol
-public protocol TranslationArchiverDelegate {
+public protocol TranslationArchiverDelegate: Sendable {
     // MARK: - Add Value
 
     func addValue(_ translation: Translation)

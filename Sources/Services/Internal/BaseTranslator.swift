@@ -10,6 +10,7 @@ import Foundation
 
 @preconcurrency import WebKit
 
+@MainActor
 class BaseTranslator: NSObject {
     // MARK: - Properties
 
@@ -57,7 +58,7 @@ class BaseTranslator: NSObject {
     private func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair,
-        completion: @escaping (Result<Translation, TranslationError>) -> Void
+        completion: @escaping @Sendable (Result<Translation, TranslationError>) -> Void
     ) {
         guard let requestURL = platform.requestURL(
             input.value,
@@ -76,7 +77,11 @@ class BaseTranslator: NSObject {
 
         dispatchGroup?.enter()
         webView?.load(.init(url: requestURL))
-        dispatchGroup?.notify(queue: .main) { completion(self.translationResult ?? .failure(.unknown())) }
+        dispatchGroup?.notify(queue: .main) { [weak self] in
+            MainActor.assumeIsolated {
+                completion(self?.translationResult ?? .failure(.unknown()))
+            }
+        }
     }
 
     // MARK: - Evaluate JavaScript
@@ -146,7 +151,7 @@ class BaseTranslator: NSObject {
     }
 
     private func didSetTranslationResult() {
-        DispatchQueue.main.async {
+        Task {
             self.dispatchGroup = nil
             self.navigationFinishedDate = nil
             self.timeout = nil

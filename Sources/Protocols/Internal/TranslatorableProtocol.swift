@@ -8,7 +8,8 @@
 /* Native */
 import Foundation
 
-protocol Translatorable {
+@MainActor
+protocol Translatorable: Sendable {
     // MARK: - Properties
 
     var platform: TranslationPlatform { get }

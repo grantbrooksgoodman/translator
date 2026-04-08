@@ -8,7 +8,7 @@
 /* Native */
 import Foundation
 
-public struct LanguagePair: Codable, Hashable {
+public struct LanguagePair: Codable, Hashable, Sendable {
     // MARK: - Properties
 
     public let from: String
