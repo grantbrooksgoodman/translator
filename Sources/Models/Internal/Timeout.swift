@@ -30,6 +30,11 @@ final class Timeout {
         }
     }
 
+    @MainActor
+    deinit {
+        cancel()
+    }
+
     // MARK: - Cancellation
 
     func cancel() {

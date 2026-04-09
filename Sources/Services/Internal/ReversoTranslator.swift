@@ -21,7 +21,6 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
     // MARK: - Evaluate JavaScript
 
-    @MainActor
     override func evaluateJavaScript(useAlternateString: Bool = false) async {
         if await restoreLanguagePairIfNeeded() {
             return await retryOrFail(
@@ -90,7 +89,6 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
     }
 
     /// - Returns: Boolean value indicating whether or not the language pair needed restoring.
-    @MainActor
     private func restoreLanguagePairIfNeeded() async -> Bool {
         return await withCheckedContinuation { continuation in
             restoreLanguagePairIfNeeded { continuation.resume(returning: $0) }

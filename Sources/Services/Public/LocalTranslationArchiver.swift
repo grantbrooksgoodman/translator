@@ -8,9 +8,6 @@
 /* Native */
 import Foundation
 
-// TODO: Ensure using languagePair.to is the correct logic path. Requires some thought.
-// TODO: Use different suite for UserDefaults.
-
 public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unchecked Sendable {
     // MARK: - Type Aliases
 
@@ -21,15 +18,9 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
     public static let shared = LocalTranslationArchiver()
 
     private let defaults = UserDefaults.standard
+    private let ioLock = NSRecursiveLock()
     private let jsonDecoder = JSONDecoder()
     private let jsonEncoder = JSONEncoder()
-
-    // MARK: - Computed Properties
-
-    private var archive: Set<Translation> {
-        get { getArchive() }
-        set { setArchive(newValue) }
-    }
 
     // MARK: - Init
 
@@ -38,11 +29,21 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
     // MARK: - Addition
 
     public func addValue(_ translation: Translation) {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+
+        var archive = getArchive()
         archive.insert(translation)
+        setArchive(archive)
     }
 
     public func addValues(_ translations: Set<Translation>) {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+
+        var archive = getArchive()
         archive.formUnion(translations)
+        setArchive(archive)
     }
 
     // MARK: - Retrieval
@@ -51,26 +52,38 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         inputValueEncodedHash hash: String,
         languagePair: LanguagePair
     ) -> Translation? {
-        archive.first(where: {
-            $0.input.value.encodedHash == hash && $0.languagePair.to == languagePair.to
+        ioLock.lock()
+        defer { ioLock.unlock() }
+
+        let archive = getArchive()
+        return archive.first(where: {
+            $0.input.value.encodedHash == hash &&
+                $0.languagePair.to == languagePair.to
         })
     }
 
     // MARK: - Removal
 
     public func clearArchive() {
-        archive = []
+        ioLock.lock()
+        defer { ioLock.unlock() }
+        setArchive([])
     }
 
     public func removeValue(
         inputValueEncodedHash hash: String,
         languagePair: LanguagePair
     ) {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+
         if let value = getValue(
             inputValueEncodedHash: hash,
             languagePair: languagePair
         ) {
+            var archive = getArchive()
             archive.remove(value)
+            setArchive(archive)
         }
     }
 

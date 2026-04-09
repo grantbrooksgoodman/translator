@@ -28,8 +28,24 @@ public extension Translator {
 
         public static let shared = Config()
 
-        public private(set) var archiverDelegate: TranslationArchiverDelegate?
-        public private(set) var loggerDelegate: TranslationLoggerDelegate?
+        private let ioLock = NSRecursiveLock()
+
+        private var _archiverDelegate: TranslationArchiverDelegate?
+        private var _loggerDelegate: TranslationLoggerDelegate?
+
+        /* MARK: Computed Properties */
+
+        public var archiverDelegate: TranslationArchiverDelegate? {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            return _archiverDelegate
+        }
+
+        public var loggerDelegate: TranslationLoggerDelegate? {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            return _loggerDelegate
+        }
 
         /* MARK: Init */
 
@@ -37,12 +53,20 @@ public extension Translator {
 
         /* MARK: Delegate Registration */
 
-        public func registerArchiverDelegate(_ archiverDelegate: TranslationArchiverDelegate) {
-            self.archiverDelegate = archiverDelegate
+        public func registerArchiverDelegate(
+            _ archiverDelegate: TranslationArchiverDelegate
+        ) {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            _archiverDelegate = archiverDelegate
         }
 
-        public func registerLoggerDelegate(_ loggerDelegate: TranslationLoggerDelegate) {
-            self.loggerDelegate = loggerDelegate
+        public func registerLoggerDelegate(
+            _ loggerDelegate: TranslationLoggerDelegate
+        ) {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            _loggerDelegate = loggerDelegate
         }
     }
 

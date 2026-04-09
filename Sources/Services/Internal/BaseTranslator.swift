@@ -39,12 +39,11 @@ class BaseTranslator: NSObject {
 
     // MARK: - Translate
 
-    @MainActor
     func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair
     ) async -> Result<Translation, TranslationError> {
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             translate(
                 input,
                 languagePair: languagePair
@@ -54,7 +53,6 @@ class BaseTranslator: NSObject {
         }
     }
 
-    @MainActor
     private func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair,
@@ -78,7 +76,7 @@ class BaseTranslator: NSObject {
         dispatchGroup?.enter()
         webView?.load(.init(url: requestURL))
         dispatchGroup?.notify(queue: .main) { [weak self] in
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
                 completion(self?.translationResult ?? .failure(.unknown()))
             }
         }
@@ -86,7 +84,6 @@ class BaseTranslator: NSObject {
 
     // MARK: - Evaluate JavaScript
 
-    @MainActor
     open func evaluateJavaScript(useAlternateString: Bool = false) async {
         do {
             guard let translationInput,
@@ -136,12 +133,13 @@ class BaseTranslator: NSObject {
     private func clearCookies() {
         let websiteDataStore = WKWebsiteDataStore.default()
         websiteDataStore.fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-            for record in records {
-                websiteDataStore.removeData(
-                    ofTypes: record.dataTypes,
-                    for: [record],
-                    completionHandler: {}
-                )
+            Task { @MainActor in
+                for record in records {
+                    await websiteDataStore.removeData(
+                        ofTypes: record.dataTypes,
+                        for: [record]
+                    )
+                }
             }
         }
 
@@ -221,7 +219,7 @@ extension BaseTranslator: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
-        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void
     ) {
         // Only ever allow HTML/text; cancel images, gifs, pdfs, etc.
         let mimeType = navigationResponse.response.mimeType?.lowercased() ?? ""
@@ -300,12 +298,15 @@ extension BaseTranslator: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
         guard let serverTrust = challenge.protectionSpace.serverTrust else { return completionHandler(.useCredential, nil) }
 
         let urlCredential: URLCredential = .init(trust: serverTrust)
-        DispatchQueue.global(qos: .userInteractive).async { completionHandler(.useCredential, urlCredential) }
+        completionHandler(
+            .useCredential,
+            urlCredential
+        )
     }
 
     // MARK: - Navigation Action Did Become Download
