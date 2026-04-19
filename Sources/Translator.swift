@@ -10,14 +10,10 @@
 /* Native */
 import Foundation
 
-// MARK: - Type Aliases
-
-typealias Config = Translator.Config
-
 // MARK: - Translator
 
-public struct Translator {
-    private init() {}
+public enum Translator {
+    public static let config = Config.shared
 }
 
 public extension Translator {
@@ -26,7 +22,7 @@ public extension Translator {
     final class Config: @unchecked Sendable {
         /* MARK: Properties */
 
-        public static let shared = Config()
+        fileprivate static let shared = Config()
 
         private let ioLock = NSRecursiveLock()
 
@@ -74,7 +70,7 @@ public extension Translator {
 
     internal static func descriptor(_ error: Error) -> String {
         func descriptor(_ error: NSError) -> String {
-            return "\(error.localizedDescription) (\(error.code))"
+            "\(error.localizedDescription) (\(error.code))"
         }
 
         typealias Strings = Constants.Strings.Core

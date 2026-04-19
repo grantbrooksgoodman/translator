@@ -9,10 +9,14 @@
 import Foundation
 
 extension String: EncodedHashable {
+    /// The components used to compute this string's encoded hash.
     public var hashFactors: [String] { [self] }
 }
 
 public extension String {
+    /// A Boolean value that indicates whether the string contains at least
+    /// one Unicode letter that is not a control character, symbol, or
+    /// punctuation mark.
     var containsLetters: Bool {
         unicodeScalars.contains { scalar in
             CharacterSet.letters.contains(scalar)

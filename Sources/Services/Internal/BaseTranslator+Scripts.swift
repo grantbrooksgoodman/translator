@@ -243,7 +243,7 @@ extension BaseTranslator {
             } else {
                 var descriptor = "An unknown error occurred."
                 if let error { descriptor = Translator.descriptor(error) }
-                Config.shared.loggerDelegate?.log(
+                Translator.config.loggerDelegate?.log(
                     descriptor,
                     sender: self,
                     fileName: #file,

@@ -8,6 +8,34 @@
 /* Native */
 import Foundation
 
+/// The translation platform to use when performing a translation.
+///
+/// `TranslationPlatform` identifies the third-party web translation service
+/// that ``TranslationService`` communicates with. Each case maps to a
+/// specific provider:
+///
+/// | Case | Provider |
+/// | --- | --- |
+/// | ``deepL`` | DeepL Translator |
+/// | ``google`` | Google Translate |
+/// | ``reverso`` | Reverso Translation |
+///
+/// When you call ``TranslationService/translate(_:languagePair:)``, the
+/// service automatically selects and falls back between platforms. To target
+/// a specific platform, use
+/// ``TranslationService/translate(_:languagePair:platform:)`` instead:
+///
+/// ```swift
+/// let result = await TranslationService.shared.translate(
+///     TranslationInput("Hello"),
+///     languagePair: LanguagePair(from: "en", to: "de"),
+///     platform: .deepL
+/// )
+/// ```
+///
+/// - Note: Not every platform supports every language. If a platform does
+///   not support the requested language pair, the translation fails with
+///   ``TranslationError/failedToGenerateRequestURL``.
 public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     // MARK: - Type Aliases
 
@@ -15,8 +43,13 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
 
     // MARK: - Cases
 
+    /// DeepL Translator.
     case deepL
+
+    /// Google Translate.
     case google
+
+    /// Reverso Translation.
     case reverso
 
     // MARK: - Properties
@@ -24,13 +57,13 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     var alternateJavaScriptString: String {
         switch self {
         case .deepL:
-            return Strings.deepLAlternateJavaScriptString
+            Strings.deepLAlternateJavaScriptString
 
         case .google:
-            return Strings.googleAlternateJavaScriptString
+            Strings.googleAlternateJavaScriptString
 
         case .reverso:
-            return Strings.reversoAlternateJavaScriptString
+            Strings.reversoAlternateJavaScriptString
         }
     }
 
@@ -46,13 +79,13 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     var javaScriptString: String {
         switch self {
         case .deepL:
-            return Strings.deepLJavaScriptString
+            Strings.deepLJavaScriptString
 
         case .google:
-            return Strings.googleJavaScriptString
+            Strings.googleJavaScriptString
 
         case .reverso:
-            return Strings.reversoJavaScriptString
+            Strings.reversoJavaScriptString
         }
     }
 

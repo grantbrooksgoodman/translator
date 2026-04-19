@@ -211,7 +211,7 @@ extension BaseTranslator: WKNavigationDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        return nil
+        nil
     }
 
     // MARK: - Dedice Policy for Navigation Response
@@ -234,7 +234,7 @@ extension BaseTranslator: WKNavigationDelegate {
         didFail navigation: WKNavigation!,
         withError error: any Error
     ) {
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view failed navigation: \(Translator.descriptor(error))",
             sender: self,
             fileName: #fileID,
@@ -254,7 +254,7 @@ extension BaseTranslator: WKNavigationDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: any Error
     ) {
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view failed provisional navigation: \(Translator.descriptor(error))",
             sender: self,
             fileName: #fileID,
@@ -275,7 +275,7 @@ extension BaseTranslator: WKNavigationDelegate {
     ) {
         typealias Strings = Constants.Strings.Core
 
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view finished navigation.",
             sender: self,
             fileName: #fileID,

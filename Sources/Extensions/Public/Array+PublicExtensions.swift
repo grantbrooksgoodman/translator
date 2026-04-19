@@ -8,13 +8,17 @@
 /* Native */
 import Foundation
 
-public extension Array where Element == Translation {
+public extension [Translation] {
+    /// A Boolean value that indicates whether the array is non-empty and
+    /// every element passes validation.
     var isWellFormed: Bool {
         !isEmpty && allSatisfy(\.isWellFormed)
     }
 }
 
-public extension Array where Element == TranslationInput {
+public extension [TranslationInput] {
+    /// A Boolean value that indicates whether the array is non-empty and
+    /// every element passes validation.
     var isWellFormed: Bool {
         !isEmpty && allSatisfy(\.isWellFormed)
     }
