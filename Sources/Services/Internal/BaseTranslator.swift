@@ -10,6 +10,7 @@ import Foundation
 
 @preconcurrency import WebKit
 
+@MainActor
 class BaseTranslator: NSObject {
     // MARK: - Properties
 
@@ -38,12 +39,11 @@ class BaseTranslator: NSObject {
 
     // MARK: - Translate
 
-    @MainActor
     func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair
     ) async -> Result<Translation, TranslationError> {
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             translate(
                 input,
                 languagePair: languagePair
@@ -53,11 +53,10 @@ class BaseTranslator: NSObject {
         }
     }
 
-    @MainActor
     private func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair,
-        completion: @escaping (Result<Translation, TranslationError>) -> Void
+        completion: @escaping @Sendable (Result<Translation, TranslationError>) -> Void
     ) {
         guard let requestURL = platform.requestURL(
             input.value,
@@ -76,12 +75,15 @@ class BaseTranslator: NSObject {
 
         dispatchGroup?.enter()
         webView?.load(.init(url: requestURL))
-        dispatchGroup?.notify(queue: .main) { completion(self.translationResult ?? .failure(.unknown())) }
+        dispatchGroup?.notify(queue: .main) { [weak self] in
+            Task { @MainActor [weak self] in
+                completion(self?.translationResult ?? .failure(.unknown()))
+            }
+        }
     }
 
     // MARK: - Evaluate JavaScript
 
-    @MainActor
     open func evaluateJavaScript(useAlternateString: Bool = false) async {
         do {
             guard let translationInput,
@@ -131,12 +133,13 @@ class BaseTranslator: NSObject {
     private func clearCookies() {
         let websiteDataStore = WKWebsiteDataStore.default()
         websiteDataStore.fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-            for record in records {
-                websiteDataStore.removeData(
-                    ofTypes: record.dataTypes,
-                    for: [record],
-                    completionHandler: {}
-                )
+            Task { @MainActor in
+                for record in records {
+                    await websiteDataStore.removeData(
+                        ofTypes: record.dataTypes,
+                        for: [record]
+                    )
+                }
             }
         }
 
@@ -146,7 +149,7 @@ class BaseTranslator: NSObject {
     }
 
     private func didSetTranslationResult() {
-        DispatchQueue.main.async {
+        Task {
             self.dispatchGroup = nil
             self.navigationFinishedDate = nil
             self.timeout = nil
@@ -208,7 +211,7 @@ extension BaseTranslator: WKNavigationDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        return nil
+        nil
     }
 
     // MARK: - Dedice Policy for Navigation Response
@@ -216,7 +219,7 @@ extension BaseTranslator: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
-        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void
     ) {
         // Only ever allow HTML/text; cancel images, gifs, pdfs, etc.
         let mimeType = navigationResponse.response.mimeType?.lowercased() ?? ""
@@ -231,7 +234,7 @@ extension BaseTranslator: WKNavigationDelegate {
         didFail navigation: WKNavigation!,
         withError error: any Error
     ) {
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view failed navigation: \(Translator.descriptor(error))",
             sender: self,
             fileName: #fileID,
@@ -251,7 +254,7 @@ extension BaseTranslator: WKNavigationDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: any Error
     ) {
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view failed provisional navigation: \(Translator.descriptor(error))",
             sender: self,
             fileName: #fileID,
@@ -272,7 +275,7 @@ extension BaseTranslator: WKNavigationDelegate {
     ) {
         typealias Strings = Constants.Strings.Core
 
-        Config.shared.loggerDelegate?.log(
+        Translator.config.loggerDelegate?.log(
             "Web view finished navigation.",
             sender: self,
             fileName: #fileID,
@@ -295,12 +298,15 @@ extension BaseTranslator: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
         guard let serverTrust = challenge.protectionSpace.serverTrust else { return completionHandler(.useCredential, nil) }
 
         let urlCredential: URLCredential = .init(trust: serverTrust)
-        DispatchQueue.global(qos: .userInteractive).async { completionHandler(.useCredential, urlCredential) }
+        completionHandler(
+            .useCredential,
+            urlCredential
+        )
     }
 
     // MARK: - Navigation Action Did Become Download

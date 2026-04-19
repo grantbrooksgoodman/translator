@@ -10,6 +10,28 @@ import Foundation
 import NaturalLanguage
 import UIKit
 
+/// A service that evaluates the likelihood that a given string belongs to a
+/// specific language.
+///
+/// `LanguageRecognitionService` combines the Natural Language framework with
+/// spell-checking heuristics to produce a confidence score for language
+/// identification. The score ranges from `0` (no confidence) to `1`
+/// (highest confidence).
+///
+/// Access the shared service instance using the ``shared`` property:
+///
+/// ```swift
+/// let confidence = await LanguageRecognitionService.shared.matchConfidence(
+///     for: "Bonjour le monde",
+///     inLanguage: "fr"
+/// )
+/// ```
+///
+/// Results are cached automatically; repeated queries for the same string and
+/// language code return without recomputation.
+///
+/// - Important: `LanguageRecognitionService` is an actor. Access its
+///   methods with an `await` expression.
 public actor LanguageRecognitionService {
     // MARK: - Types
 
@@ -20,6 +42,7 @@ public actor LanguageRecognitionService {
 
     // MARK: - Properties
 
+    /// The shared language recognition service instance.
     public static let shared = LanguageRecognitionService()
 
     private var cachedResults = [CacheKey: Float]()
@@ -30,6 +53,37 @@ public actor LanguageRecognitionService {
 
     // MARK: - Methods
 
+    /// Returns a confidence score indicating how likely the given string is
+    /// written in the specified language.
+    ///
+    /// The confidence score is a composite of three weighted signals:
+    /// - **Dominant language detection** (weight: 0.4) – Whether the language
+    ///   recognizer identifies the string's dominant language as matching the
+    ///   given language code.
+    /// - **Language hypothesis** (weight: 0.4) – Whether the top language
+    ///   hypothesis matches the given language code with at least 45%
+    ///   probability.
+    /// - **Spell-check validation** (weight: 0.2) – Whether the majority of
+    ///   words in the string pass spell-checking for the given language.
+    ///
+    /// ```swift
+    /// let confidence = await LanguageRecognitionService.shared.matchConfidence(
+    ///     for: "Guten Morgen",
+    ///     inLanguage: "de"
+    /// )
+    /// // A value greater than 0.8 suggests high likelihood of German text.
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - string: The text to evaluate.
+    ///   - languageCode: An ISO 639-1 language code (for example, `"en"`,
+    ///     `"fr"`, or `"ja"`).
+    ///
+    /// - Returns: A value between `0` and `1`, where higher values indicate
+    ///   greater confidence that the string is written in the specified language.
+    ///
+    /// - Note: Results are cached for the lifetime of the service instance.
+    ///   Identical queries return the cached value without recomputation.
     public func matchConfidence(
         for string: String,
         inLanguage languageCode: String

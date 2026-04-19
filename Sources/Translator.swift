@@ -10,26 +10,38 @@
 /* Native */
 import Foundation
 
-// MARK: - Type Aliases
-
-typealias Config = Translator.Config
-
 // MARK: - Translator
 
-public struct Translator {
-    private init() {}
+public enum Translator {
+    public static let config = Config.shared
 }
 
 public extension Translator {
     /* MARK: Types */
 
-    final class Config {
+    final class Config: @unchecked Sendable {
         /* MARK: Properties */
 
-        public static let shared = Config()
+        fileprivate static let shared = Config()
 
-        public private(set) var archiverDelegate: TranslationArchiverDelegate?
-        public private(set) var loggerDelegate: TranslationLoggerDelegate?
+        private let ioLock = NSRecursiveLock()
+
+        private var _archiverDelegate: TranslationArchiverDelegate?
+        private var _loggerDelegate: TranslationLoggerDelegate?
+
+        /* MARK: Computed Properties */
+
+        public var archiverDelegate: TranslationArchiverDelegate? {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            return _archiverDelegate
+        }
+
+        public var loggerDelegate: TranslationLoggerDelegate? {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            return _loggerDelegate
+        }
 
         /* MARK: Init */
 
@@ -37,12 +49,20 @@ public extension Translator {
 
         /* MARK: Delegate Registration */
 
-        public func registerArchiverDelegate(_ archiverDelegate: TranslationArchiverDelegate) {
-            self.archiverDelegate = archiverDelegate
+        public func registerArchiverDelegate(
+            _ archiverDelegate: TranslationArchiverDelegate
+        ) {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            _archiverDelegate = archiverDelegate
         }
 
-        public func registerLoggerDelegate(_ loggerDelegate: TranslationLoggerDelegate) {
-            self.loggerDelegate = loggerDelegate
+        public func registerLoggerDelegate(
+            _ loggerDelegate: TranslationLoggerDelegate
+        ) {
+            ioLock.lock()
+            defer { ioLock.unlock() }
+            _loggerDelegate = loggerDelegate
         }
     }
 
@@ -50,7 +70,7 @@ public extension Translator {
 
     internal static func descriptor(_ error: Error) -> String {
         func descriptor(_ error: NSError) -> String {
-            return "\(error.localizedDescription) (\(error.code))"
+            "\(error.localizedDescription) (\(error.code))"
         }
 
         typealias Strings = Constants.Strings.Core

@@ -21,7 +21,6 @@ final class GoogleTranslator: BaseTranslator, Translatorable {
 
     // MARK: - Evaluate JavaScript
 
-    @MainActor
     override func evaluateJavaScript(useAlternateString: Bool = false) async {
         do {
             guard let translationInput,
