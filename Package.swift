@@ -9,8 +9,6 @@ let package = Package(
     name: "Translator",
     platforms: [
         .iOS(.v17),
-        .tvOS(.v17),
-        .macOS(.v14),
     ],
     products: [
         .library(
@@ -27,8 +25,8 @@ let package = Package(
             name: "Translator",
             dependencies: [],
             path: "Sources",
+            swiftSettings: [.swiftLanguageMode(.v6)],
             plugins: [ /* .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint") */ ]
         ),
-    ],
-    swiftLanguageModes: [.v6]
+    ]
 )

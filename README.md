@@ -216,7 +216,7 @@ Translator adopts Swift 6 strict concurrency. All public types conform to `Senda
 - **[`TranslationService`](Sources/Services/Public/TranslationService.swift)** is a `Sendable` structure. Its methods are asynchronous and safe to call from any context.
 - **[`LanguageRecognitionService`](Sources/Services/Public/LanguageRecognitionService.swift)** is an actor. Access its methods with `await`.
 - **[`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift)** uses internal locking and is safe to call from any thread.
-- **[`Translator.Config`](Sources/Translator.swift#L26)** uses internal locking. Delegate registration and access are safe from any thread.
+- **[`Translator.Config`](Sources/Translator.swift)** uses internal locking. Delegate registration and access are safe from any thread.
 
 ---
 

@@ -12,13 +12,48 @@ import Foundation
 
 // MARK: - Translator
 
+/// The top-level namespace for the Translator framework.
+///
+/// `Translator` provides access to the framework's configuration through
+/// the ``config`` property. Use it to register custom delegates that
+/// control caching and logging behavior:
+///
+/// ```swift
+/// Translator.config.registerArchiverDelegate(myArchiver)
+/// Translator.config.registerLoggerDelegate(myLogger)
+/// ```
+///
+/// For performing translations, use ``TranslationService`` directly.
 public enum Translator {
+    /// The shared configuration object for the Translator framework.
+    ///
+    /// Use this property to register delegates that customize how the
+    /// framework caches translations and reports diagnostic messages.
     public static let config = Config.shared
 }
 
 public extension Translator {
     /* MARK: Types */
 
+    /// The configuration object for the Translator framework.
+    ///
+    /// Use `Config` to register the delegates that control how the
+    /// framework caches completed translations and routes diagnostic
+    /// messages. Access the shared instance through ``Translator/config``:
+    ///
+    /// ```swift
+    /// Translator.config.registerArchiverDelegate(myArchiver)
+    /// Translator.config.registerLoggerDelegate(myLogger)
+    /// ```
+    ///
+    /// When no archiver delegate is registered, ``TranslationService``
+    /// falls back to ``LocalTranslationArchiver``, which persists
+    /// translations in `UserDefaults`. When no logger delegate is
+    /// registered, diagnostic messages are silently discarded.
+    ///
+    /// - Important: `Config` is safe to access from any thread or
+    ///   concurrency context. All property access and delegate
+    ///   registration are internally serialized.
     final class Config: @unchecked Sendable {
         /* MARK: Properties */
 
@@ -31,12 +66,22 @@ public extension Translator {
 
         /* MARK: Computed Properties */
 
+        /// The registered translation archiver delegate, or `nil` if
+        /// none has been registered.
+        ///
+        /// When this value is `nil`, ``TranslationService`` uses
+        /// ``LocalTranslationArchiver`` as its default caching strategy.
         public var archiverDelegate: TranslationArchiverDelegate? {
             ioLock.lock()
             defer { ioLock.unlock() }
             return _archiverDelegate
         }
 
+        /// The registered translation logger delegate, or `nil` if
+        /// none has been registered.
+        ///
+        /// When this value is `nil`, the framework silently discards
+        /// all diagnostic messages.
         public var loggerDelegate: TranslationLoggerDelegate? {
             ioLock.lock()
             defer { ioLock.unlock() }
@@ -49,6 +94,19 @@ public extension Translator {
 
         /* MARK: Delegate Registration */
 
+        /// Registers a custom archiver delegate for caching translations.
+        ///
+        /// Once registered, ``TranslationService`` consults this delegate
+        /// before every network request and stores each successful
+        /// translation through it. Calling this method replaces any
+        /// previously registered archiver.
+        ///
+        /// ```swift
+        /// Translator.config.registerArchiverDelegate(DatabaseArchiver())
+        /// ```
+        ///
+        /// - Parameter archiverDelegate: The delegate to use for
+        ///   translation caching.
         public func registerArchiverDelegate(
             _ archiverDelegate: TranslationArchiverDelegate
         ) {
@@ -57,6 +115,19 @@ public extension Translator {
             _archiverDelegate = archiverDelegate
         }
 
+        /// Registers a custom logger delegate for receiving diagnostic
+        /// messages.
+        ///
+        /// Once registered, the framework routes internal errors and
+        /// notable events to this delegate. Calling this method replaces
+        /// any previously registered logger.
+        ///
+        /// ```swift
+        /// Translator.config.registerLoggerDelegate(TranslationLogger())
+        /// ```
+        ///
+        /// - Parameter loggerDelegate: The delegate to use for diagnostic
+        ///   logging.
         public func registerLoggerDelegate(
             _ loggerDelegate: TranslationLoggerDelegate
         ) {
