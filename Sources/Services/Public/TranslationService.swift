@@ -50,6 +50,28 @@ public struct TranslationService: Sendable {
 
     private init() {}
 
+    // MARK: - Prewarm
+
+    /// Warms the underlying network connections to translation service hosts.
+    ///
+    /// Call this method early in the app lifecycle (e.g. at launch) to establish
+    /// DNS resolution and TLS sessions ahead of the first translation request.
+    /// This reduces latency on the first call to ``translate(_:languagePair:)``
+    /// without retaining any web views or accumulating cookies.
+    ///
+    /// ```swift
+    /// TranslationService.shared.prewarm()
+    /// ```
+    ///
+    /// - Parameter platforms: The platforms to prewarm connections for.
+    ///   Defaults to ``TranslationPlatform/allCases``.
+    @MainActor
+    public func prewarm(
+        _ platforms: [TranslationPlatform] = TranslationPlatform.allCases
+    ) {
+        BaseTranslator.prewarm(platforms)
+    }
+
     // MARK: - Translate
 
     /// Translates the given input into the target language, automatically selecting

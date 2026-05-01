@@ -37,6 +37,23 @@ class BaseTranslator: NSObject {
         self.platform = platform
     }
 
+    // MARK: - Prewarm
+
+    static func prewarm(_ platforms: [TranslationPlatform]) {
+        for platform in platforms {
+            guard let url = platform.prewarmURL else { continue }
+
+            let webView = WKWebView(frame: .zero)
+            webView.load(.init(url: url))
+
+            // TODO: Audit this.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                webView.stopLoading()
+                webView.removeFromSuperview()
+            }
+        }
+    }
+
     // MARK: - Translate
 
     func translate(
@@ -131,17 +148,19 @@ class BaseTranslator: NSObject {
     }
 
     private func clearCookies() {
-        let websiteDataStore = WKWebsiteDataStore.default()
-        websiteDataStore.fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-            Task { @MainActor in
-                for record in records {
-                    await websiteDataStore.removeData(
-                        ofTypes: record.dataTypes,
-                        for: [record]
-                    )
-                }
-            }
-        }
+        let dataTypes: Set<String> = [
+            WKWebsiteDataTypeCookies,
+            WKWebsiteDataTypeIndexedDBDatabases,
+            WKWebsiteDataTypeLocalStorage,
+            WKWebsiteDataTypeServiceWorkerRegistrations,
+            WKWebsiteDataTypeSessionStorage,
+            WKWebsiteDataTypeWebSQLDatabases,
+        ]
+
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: dataTypes,
+            modifiedSince: .distantPast
+        ) {}
 
         DispatchQueue.global(qos: .utility).async {
             HTTPCookieStorage.shared.removeCookies(since: Date.distantPast)

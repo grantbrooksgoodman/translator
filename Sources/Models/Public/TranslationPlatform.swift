@@ -89,6 +89,19 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
         }
     }
 
+    var prewarmURL: URL? {
+        switch self {
+        case .deepL:
+            .init(string: "https://www.deepl.com/en/translator")
+
+        case .google:
+            .init(string: "https://translate.google.com/?hl=en")
+
+        case .reverso:
+            .init(string: "https://www.reverso.net/text-translation")
+        }
+    }
+
     // MARK: - Methods
 
     func requestURL(
