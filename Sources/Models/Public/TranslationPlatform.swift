@@ -18,6 +18,7 @@ import Foundation
 /// | --- | --- |
 /// | ``deepL`` | DeepL Translator |
 /// | ``google`` | Google Translate |
+/// | ``lara`` | Lara Translate |
 /// | ``reverso`` | Reverso Translation |
 ///
 /// When you call ``TranslationService/translate(_:languagePair:)``, the
@@ -49,6 +50,9 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     /// Google Translate.
     case google
 
+    /// Lara Translate.
+    case lara
+
     /// Reverso Translation.
     case reverso
 
@@ -56,14 +60,10 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
 
     var alternateJavaScriptString: String {
         switch self {
-        case .deepL:
-            Strings.deepLAlternateJavaScriptString
-
-        case .google:
-            Strings.googleAlternateJavaScriptString
-
-        case .reverso:
-            Strings.reversoAlternateJavaScriptString
+        case .deepL: Strings.deepLAlternateJavaScriptString
+        case .google: Strings.googleAlternateJavaScriptString
+        case .lara: Strings.laraJavaScriptString
+        case .reverso: Strings.reversoAlternateJavaScriptString
         }
     }
 
@@ -73,20 +73,28 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
         case .deepL: DeepLTranslator()
         case .google: GoogleTranslator()
         case .reverso: ReversoTranslator()
+        case .lara: LaraTranslator()
         }
     }
 
     var javaScriptString: String {
         switch self {
-        case .deepL:
-            Strings.deepLJavaScriptString
-
-        case .google:
-            Strings.googleJavaScriptString
-
-        case .reverso:
-            Strings.reversoJavaScriptString
+        case .deepL: Strings.deepLJavaScriptString
+        case .google: Strings.googleJavaScriptString
+        case .lara: Strings.laraJavaScriptString
+        case .reverso: Strings.reversoJavaScriptString
         }
+    }
+
+    var prewarmURL: URL? {
+        let urlString = switch self {
+        case .deepL: "https://www.deepl.com/en/translator"
+        case .google: "https://translate.google.com/?hl=en"
+        case .reverso: "https://www.reverso.net/text-translation"
+        case .lara: "https://laratranslate.com/translate"
+        }
+
+        return .init(string: urlString)
     }
 
     // MARK: - Methods
@@ -99,16 +107,14 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
               let target = identifier(for: languagePair.to),
               let text = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
 
-        switch self {
-        case .deepL:
-            return .init(string: "https://www.deepl.com/en/translator#\(source)/\(target)/\(text)")
-
-        case .google:
-            return .init(string: "https://translate.google.com/?hl=en&sl=\(source)&tl=\(target)&text=\(text)&op=translate")
-
-        case .reverso:
-            return .init(string: "https://www.reverso.net/text-translation#sl=\(source)&tl=\(target)&text=\(text)")
+        let urlString = switch self {
+        case .deepL: "https://www.deepl.com/en/translator#\(source)/\(target)/\(text)"
+        case .google: "https://translate.google.com/?hl=en&sl=\(source)&tl=\(target)&text=\(text)&op=translate"
+        case .reverso: "https://www.reverso.net/text-translation#sl=\(source)&tl=\(target)&text=\(text)"
+        case .lara: "https://laratranslate.com/translate?source=\(source)&text=\(text)&target=\(target)"
         }
+
+        return .init(string: urlString)
     }
 
     private func identifier(for languageCode: String) -> String? {
@@ -137,6 +143,9 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
 
         case .google:
             return languageCode == "he" ? "iw" : languageCode == "zh" ? "zh-CN" : languageCode
+
+        case .lara:
+            return languageCode
 
         case .reverso:
             let languageCodeMap = [

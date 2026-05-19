@@ -11,7 +11,7 @@ import Foundation
 /// A service that translates text between languages using multiple translation platforms.
 ///
 /// `TranslationService` is the primary interface for performing translations. It coordinates
-/// between multiple translation platforms – Google Translate, DeepL, and Reverso – and
+/// between multiple translation platforms – Google Translate, DeepL, Lara, and Reverso – and
 /// automatically falls back to alternative platforms when a translation fails or returns
 /// an unchanged result.
 ///
@@ -50,13 +50,36 @@ public struct TranslationService: Sendable {
 
     private init() {}
 
+    // MARK: - Prewarm
+
+    /// Warms the underlying network connections to translation service hosts.
+    ///
+    /// Call this method early in the app lifecycle (e.g. at launch) to establish
+    /// DNS resolution and TLS sessions ahead of the first translation request.
+    /// This reduces latency on the first call to ``translate(_:languagePair:)``
+    /// without retaining any web views or accumulating cookies.
+    ///
+    /// ```swift
+    /// TranslationService.shared.prewarm()
+    /// ```
+    ///
+    /// - Parameter platforms: The platforms to prewarm connections for.
+    ///   Defaults to ``TranslationPlatform/allCases``.
+    @MainActor
+    public func prewarm(
+        _ platforms: [TranslationPlatform] = TranslationPlatform.allCases
+    ) {
+        BaseTranslator.prewarm(platforms)
+    }
+
     // MARK: - Translate
 
     /// Translates the given input into the target language, automatically selecting
     /// the best platform and falling back to alternatives as needed.
     ///
     /// The service attempts translation using Google Translate first. If Google returns
-    /// an unchanged result or fails, it falls back to DeepL, and then to Reverso.
+    /// an unchanged result or fails, it falls back to DeepL, then to Reverso, and
+    /// finally to Lara.
     ///
     /// ```swift
     /// let result = await TranslationService.shared.translate(
@@ -91,10 +114,11 @@ public struct TranslationService: Sendable {
 
             switch translateWithReversoResult {
             case let .success(translation):
+                guard translation.output.normalized != input.value.normalized else { return await reversoFailureScenario() }
                 return .success(translation)
 
             case let .failure(error):
-                return .failure(error)
+                return await reversoFailureScenario()
             }
         }
 
@@ -112,6 +136,22 @@ public struct TranslationService: Sendable {
 
             case .failure:
                 return await deepLFailureScenario()
+            }
+        }
+
+        func reversoFailureScenario() async -> Result<Translation, TranslationError> {
+            let translateWithLaraResult = await translate(
+                input,
+                languagePair: languagePair,
+                platform: .lara
+            )
+
+            switch translateWithLaraResult {
+            case let .success(translation):
+                return .success(translation)
+
+            case let .failure(error):
+                return .failure(error)
             }
         }
 
@@ -315,7 +355,9 @@ public struct TranslationService: Sendable {
                 inputs.count
             )
 
-            for _ in 0 ..< maxConcurrentOperations { enqueueNextTask() }
+            for _ in 0 ..< maxConcurrentOperations {
+                enqueueNextTask()
+            }
 
             // As each task finishes, enqueue another until done.
             while let (index, result) = await taskGroup.next() {

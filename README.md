@@ -2,7 +2,7 @@
 
 A Swift package for translating text between languages using web-based translation platforms.
 
-Translator coordinates between Google Translate, DeepL, and Reverso to produce translations, automatically falling back to alternative platforms when a translation fails or returns an unchanged result. It caches completed translations locally, recognizes input languages to avoid redundant work, and preserves addresses, links, and phone numbers through the translation process.
+Translator coordinates between Google Translate, DeepL, Lara, and Reverso to produce translations, automatically falling back to alternative platforms when a translation fails or returns an unchanged result. It caches completed translations locally, recognizes input languages to avoid redundant work, and preserves addresses, links, and phone numbers through the translation process.
 
 ---
 
@@ -12,6 +12,7 @@ Translator coordinates between Google Translate, DeepL, and Reverso to produce t
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
+  - [Prewarm Connections](#prewarm-connections)
   - [Translate a Single String](#translate-a-single-string)
   - [Translate Multiple Strings](#translate-multiple-strings)
   - [Target a Specific Platform](#target-a-specific-platform)
@@ -55,6 +56,29 @@ Translator is distributed as a Swift package. Add it to your project using [Swif
 ---
 
 ## Getting Started
+
+### Prewarm Connections
+
+Reduce the latency of the first translation request by establishing network connections ahead of time. Call `prewarm(_:)` early in your app's lifecycle – for example, in your app delegate's `application(_:didFinishLaunchingWithOptions:)` method:
+
+```swift
+@MainActor
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    TranslationService.shared.prewarm()
+    return true
+}
+```
+
+This establishes DNS resolution and TLS sessions to each translation platform without retaining any web views or accumulating cookies. Subsequent translation requests reuse these connections through the shared WebKit networking layer.
+
+To prewarm only specific platforms, pass them explicitly:
+
+```swift
+TranslationService.shared.prewarm([.deepL, .google])
+```
 
 ### Translate a Single String
 
@@ -107,7 +131,7 @@ let result = await TranslationService.shared.translate(
 )
 ```
 
-The available platforms are `.google`, `.deepL`, and `.reverso`. Not every platform supports every language; if the requested language pair is unsupported, the translation fails with `TranslationError.failedToGenerateRequestURL`.
+The available platforms are `.google`, `.deepL`, `.lara`, and `.reverso`. Not every platform supports every language; if the requested language pair is unsupported, the translation fails with `TranslationError.failedToGenerateRequestURL`.
 
 ---
 

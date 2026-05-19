@@ -29,12 +29,29 @@ class BaseTranslator: NSObject {
 
     // MARK: - Computed Properties
 
-    private var didReachEvaluationThreshold: Bool { getDidReachEvaluationThreshold() }
+    private var didReachEvaluationThreshold: Bool {
+        getDidReachEvaluationThreshold()
+    }
 
     // MARK: - Init
 
     init(platform: TranslationPlatform) {
         self.platform = platform
+    }
+
+    // MARK: - Prewarm
+
+    static func prewarm(_ platforms: [TranslationPlatform]) {
+        for prewarmURL in platforms.compactMap(\.prewarmURL) {
+            let webView = WKWebView(frame: .zero)
+            webView.load(.init(url: prewarmURL))
+
+            // TODO: Audit this.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                webView.stopLoading()
+                webView.removeFromSuperview()
+            }
+        }
     }
 
     // MARK: - Translate
@@ -68,6 +85,8 @@ class BaseTranslator: NSObject {
 
         clearCookies()
         initializeWebView()
+        configureWebView()
+
         if platform != .deepL { addTrimLazyLoadersScript() }
         dispatchGroup = .init()
 
@@ -81,6 +100,10 @@ class BaseTranslator: NSObject {
             }
         }
     }
+
+    // MARK: - Configure Web View
+
+    open func configureWebView() {}
 
     // MARK: - Evaluate JavaScript
 
@@ -131,17 +154,19 @@ class BaseTranslator: NSObject {
     }
 
     private func clearCookies() {
-        let websiteDataStore = WKWebsiteDataStore.default()
-        websiteDataStore.fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) { records in
-            Task { @MainActor in
-                for record in records {
-                    await websiteDataStore.removeData(
-                        ofTypes: record.dataTypes,
-                        for: [record]
-                    )
-                }
-            }
-        }
+        let dataTypes: Set<String> = [
+            WKWebsiteDataTypeCookies,
+            WKWebsiteDataTypeIndexedDBDatabases,
+            WKWebsiteDataTypeLocalStorage,
+            WKWebsiteDataTypeServiceWorkerRegistrations,
+            WKWebsiteDataTypeSessionStorage,
+            WKWebsiteDataTypeWebSQLDatabases,
+        ]
+
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: dataTypes,
+            modifiedSince: .distantPast
+        ) {}
 
         DispatchQueue.global(qos: .utility).async {
             HTTPCookieStorage.shared.removeCookies(since: Date.distantPast)
@@ -331,7 +356,15 @@ extension BaseTranslator: WKNavigationDelegate {
 }
 
 final class StaticWebView: WKWebView {
-    override var canBecomeFirstResponder: Bool { false }
-    override var inputAccessoryView: UIView? { UIView(frame: .zero) }
-    override var inputView: UIView? { UIView(frame: .zero) }
+    override var canBecomeFirstResponder: Bool {
+        false
+    }
+
+    override var inputAccessoryView: UIView? {
+        UIView(frame: .zero)
+    }
+
+    override var inputView: UIView? {
+        UIView(frame: .zero)
+    }
 }
