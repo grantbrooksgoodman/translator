@@ -43,7 +43,7 @@ Translator coordinates between Google Translate, DeepL, Lara, and Reverso to pro
 
 | Platform | Minimum Version |
 | --- | --- |
-| iOS | 17.0 |
+| iOS | 18.0 |
 
 Translator has no external dependencies.
 
@@ -87,15 +87,13 @@ Use [`TranslationService`](Sources/Services/Public/TranslationService.swift) to 
 ```swift
 import Translator
 
-let result = await TranslationService.shared.translate(
-    TranslationInput("Good morning"),
-    languagePair: LanguagePair(from: "en", to: "fr")
-)
-
-switch result {
-case let .success(translation):
+do {
+    let translation = try await TranslationService.shared.translate(
+        TranslationInput("Good morning"),
+        languagePair: LanguagePair(from: "en", to: "fr")
+    )
     print(translation.output)
-case let .failure(error):
+} catch {
     print(error.localizedDescription)
 }
 ```
@@ -111,20 +109,20 @@ let inputs: [TranslationInput] = [
     .init("Thank you"),
 ]
 
-let result = await TranslationService.shared.getTranslations(
+let translations = try await TranslationService.shared.getTranslations(
     inputs,
     languagePair: LanguagePair(from: "en", to: "ja")
 )
 ```
 
-If any translation in the batch fails, the entire operation is canceled and the error is returned.
+If any translation in the batch fails, the entire operation is canceled and the error is thrown.
 
 ### Target a Specific Platform
 
 To bypass automatic platform selection, specify a [`TranslationPlatform`](Sources/Models/Public/TranslationPlatform.swift) directly:
 
 ```swift
-let result = await TranslationService.shared.translate(
+let translation = try await TranslationService.shared.translate(
     TranslationInput("Hello"),
     languagePair: LanguagePair(from: "en", to: "de"),
     platform: .deepL

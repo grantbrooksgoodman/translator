@@ -19,5 +19,5 @@ protocol Translatorable: Sendable {
     func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair
-    ) async -> Result<Translation, TranslationError>
+    ) async throws -> Translation
 }

@@ -15,14 +15,11 @@ import Foundation
 /// ``TranslationService``:
 ///
 /// ```swift
-/// let result = await TranslationService.shared.translate(
+/// let translation = try await TranslationService.shared.translate(
 ///     TranslationInput("Hello"),
 ///     languagePair: LanguagePair(from: "en", to: "es")
 /// )
-///
-/// if case let .success(translation) = result {
-///     print(translation.output) // The translated text
-/// }
+/// print(translation.output) // The translated text
 /// ```
 ///
 /// `Translation` conforms to `Codable` and `Hashable`, making it suitable

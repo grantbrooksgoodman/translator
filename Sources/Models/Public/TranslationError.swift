@@ -12,16 +12,15 @@ import Foundation
 ///
 /// `TranslationError` conforms to `LocalizedError`, providing a
 /// human-readable ``errorDescription`` for each case. You receive these
-/// errors as the failure value of the `Result` returned by
-/// ``TranslationService`` methods:
+/// errors when a ``TranslationService`` method throws:
 ///
 /// ```swift
-/// let result = await TranslationService.shared.translate(
-///     TranslationInput("Hello"),
-///     languagePair: LanguagePair(from: "en", to: "es")
-/// )
-///
-/// if case let .failure(error) = result {
+/// do {
+///     let translation = try await TranslationService.shared.translate(
+///         TranslationInput("Hello"),
+///         languagePair: LanguagePair(from: "en", to: "es")
+///     )
+/// } catch {
 ///     print(error.localizedDescription)
 /// }
 /// ```

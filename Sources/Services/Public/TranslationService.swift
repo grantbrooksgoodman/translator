@@ -26,7 +26,7 @@ import Foundation
 /// ```swift
 /// let input = TranslationInput("Hello")
 /// let languagePair = LanguagePair(from: "en", to: "es")
-/// let result = await TranslationService.shared.translate(
+/// let translation = try await TranslationService.shared.translate(
 ///    input,
 ///    languagePair: languagePair
 /// )
@@ -82,15 +82,13 @@ public struct TranslationService: Sendable {
     /// finally to Lara.
     ///
     /// ```swift
-    /// let result = await TranslationService.shared.translate(
-    ///     TranslationInput("Good morning"),
-    ///     languagePair: LanguagePair(from: "en", to: "fr")
-    /// )
-    ///
-    /// switch result {
-    /// case let .success(translation):
+    /// do {
+    ///     let translation = try await TranslationService.shared.translate(
+    ///         TranslationInput("Good morning"),
+    ///         languagePair: LanguagePair(from: "en", to: "fr")
+    ///     )
     ///     print(translation.output)
-    /// case let .failure(error):
+    /// } catch {
     ///     print(error.localizedDescription)
     /// }
     /// ```
@@ -99,76 +97,34 @@ public struct TranslationService: Sendable {
     ///   - input: A ``TranslationInput`` value containing the text to translate.
     ///   - languagePair: The source and target languages for the translation.
     ///
-    /// - Returns: A `Result` containing the completed ``Translation`` on success,
-    ///   or a ``TranslationError`` on failure.
+    /// - Returns: The completed ``Translation``.
+    ///
+    /// - Throws: ``TranslationError`` if all platforms fail to produce a translation.
     public func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair
-    ) async -> Result<Translation, TranslationError> {
-        func deepLFailureScenario() async -> Result<Translation, TranslationError> {
-            let translateWithReversoResult = await translate(
+    ) async throws -> Translation {
+        let fallbackPlatforms: [TranslationPlatform] = [
+            .google,
+            .deepL,
+            .reverso,
+        ]
+
+        for platform in fallbackPlatforms {
+            if let translation = try? await translate(
                 input,
                 languagePair: languagePair,
-                platform: .reverso
-            )
-
-            switch translateWithReversoResult {
-            case let .success(translation):
-                guard translation.output.normalized != input.value.normalized else { return await reversoFailureScenario() }
-                return .success(translation)
-
-            case let .failure(error):
-                return await reversoFailureScenario()
+                platform: platform
+            ), translation.output.normalized != input.value.normalized {
+                return translation
             }
         }
 
-        func googleFailureScenario() async -> Result<Translation, TranslationError> {
-            let translateWithDeepLResult = await translate(
-                input,
-                languagePair: languagePair,
-                platform: .deepL
-            )
-
-            switch translateWithDeepLResult {
-            case let .success(translation):
-                guard translation.output.normalized != input.value.normalized else { return await deepLFailureScenario() }
-                return .success(translation)
-
-            case .failure:
-                return await deepLFailureScenario()
-            }
-        }
-
-        func reversoFailureScenario() async -> Result<Translation, TranslationError> {
-            let translateWithLaraResult = await translate(
-                input,
-                languagePair: languagePair,
-                platform: .lara
-            )
-
-            switch translateWithLaraResult {
-            case let .success(translation):
-                return .success(translation)
-
-            case let .failure(error):
-                return .failure(error)
-            }
-        }
-
-        let translateWithGoogleResult = await translate(
+        return try await translate(
             input,
             languagePair: languagePair,
-            platform: .google
+            platform: .lara
         )
-
-        switch translateWithGoogleResult {
-        case let .success(translation):
-            guard translation.output.normalized != input.value.normalized else { return await googleFailureScenario() }
-            return .success(translation)
-
-        case .failure:
-            return await googleFailureScenario()
-        }
     }
 
     /// Translates the given input into the target language using a specific
@@ -194,31 +150,40 @@ public struct TranslationService: Sendable {
     ///   - languagePair: The source and target languages for the translation.
     ///   - platform: The ``TranslationPlatform`` to use for translation.
     ///
-    /// - Returns: A `Result` containing the completed ``Translation`` on success,
-    ///   or a ``TranslationError`` on failure.
+    /// - Returns: The completed ``Translation``.
+    ///
+    /// - Throws: ``TranslationError`` if the translation cannot be completed.
     ///
     /// - Important: Both the input and language pair must pass validation. If either
-    ///   is malformed, the method returns ``TranslationError/invalidArguments``.
+    ///   is malformed, the method throws ``TranslationError/invalidArguments``.
     public func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair,
         platform: TranslationPlatform
-    ) async -> Result<Translation, TranslationError> {
+    ) async throws -> Translation {
         let input = input.withTokenizedDetectorAttributes
         guard input.isWellFormed,
-              languagePair.isWellFormed else { return .failure(.invalidArguments) }
+              languagePair.isWellFormed else { throw TranslationError.invalidArguments }
 
         let translationArchiver = Translator.config.archiverDelegate ?? LocalTranslationArchiver.shared
 
         let hasUnicodeLetters = input.value.containsLetters
-        let sameInputOutputLanguage = await LanguageRecognitionService.shared.matchConfidence(for: input.value, inLanguage: languagePair.to) > 0.8
+        let sameInputOutputLanguage = await LanguageRecognitionService.shared.matchConfidence(
+            for: input.value,
+            inLanguage: languagePair.to
+        ) > 0.8
 
-        if !hasUnicodeLetters || languagePair.isIdempotent || sameInputOutputLanguage {
-            return .success(.init(
+        if !hasUnicodeLetters ||
+            languagePair.isIdempotent ||
+            sameInputOutputLanguage {
+            return .init(
                 input: input,
-                output: input.value.replacingOccurrences(of: Strings.processingDelimiter, with: ""),
+                output: input.value.replacingOccurrences(
+                    of: Strings.processingDelimiter,
+                    with: ""
+                ),
                 languagePair: languagePair
-            ))
+            )
         }
 
         if let archivedTranslation = translationArchiver.getValue(
@@ -233,50 +198,52 @@ public struct TranslationService: Sendable {
                     inputValueEncodedHash: archivedTranslation.input.value.encodedHash,
                     languagePair: archivedTranslation.languagePair
                 )
-                return await translate(input, languagePair: languagePair, platform: platform)
+
+                return try await translate(
+                    input,
+                    languagePair: languagePair,
+                    platform: platform
+                )
             }
 
-            return .success(.init(
+            return .init(
                 input: input,
                 output: archivedTranslation.output,
                 languagePair: languagePair
-            ))
+            )
         }
 
         let inputTokens = input.value.tokenized(delimiter: Strings.processingDelimiter)
-        let translateResult = await platform.instance.translate(
+        let translation = try await platform.instance.translate(
             .init(inputTokens.processed.trimmingTrailingWhitespaceAndNewlines),
             languagePair: languagePair
         )
 
-        switch translateResult {
-        case let .success(translation):
-            if !inputTokens.slices.isEmpty,
-               !translation.output.contains(Strings.processingToken) {
-                return .failure(.malformedTranslationResult)
-            }
-
-            let processedOutput = translation
-                .output
-                .replacing(token: Strings.processingToken, with: inputTokens.slices)
-                .replacingOccurrences(of: Strings.processingToken, with: "")
-                .replacingOccurrences(of: Strings.processingDelimiter, with: "")
-                .trimmingTrailingWhitespaceAndNewlines
-                .capitalized(relativeTo: input.value)
-
-            let processedTranslation: Translation = .init(
-                input: input,
-                output: processedOutput,
-                languagePair: translation.languagePair
-            )
-
-            guard processedTranslation.isWellFormed else { return .failure(.malformedTranslationResult) }
-            translationArchiver.addValue(processedTranslation)
-            return .success(processedTranslation)
-
-        case let .failure(error):
-            return .failure(error)
+        if !inputTokens.slices.isEmpty,
+           !translation.output.contains(Strings.processingToken) {
+            throw TranslationError.malformedTranslationResult
         }
+
+        let processedOutput = translation
+            .output
+            .replacing(token: Strings.processingToken, with: inputTokens.slices)
+            .replacingOccurrences(of: Strings.processingToken, with: "")
+            .replacingOccurrences(of: Strings.processingDelimiter, with: "")
+            .trimmingTrailingWhitespaceAndNewlines
+            .capitalized(relativeTo: input.value)
+
+        let processedTranslation: Translation = .init(
+            input: input,
+            output: processedOutput,
+            languagePair: translation.languagePair
+        )
+
+        guard processedTranslation.isWellFormed else {
+            throw TranslationError.malformedTranslationResult
+        }
+
+        translationArchiver.addValue(processedTranslation)
+        return processedTranslation
     }
 
     // MARK: - Get Translations
@@ -294,7 +261,7 @@ public struct TranslationService: Sendable {
     ///     .init("Thank you"),
     /// ]
     ///
-    /// let result = await TranslationService.shared.getTranslations(
+    /// let translations = try await TranslationService.shared.getTranslations(
     ///     inputs,
     ///     languagePair: LanguagePair(from: "en", to: "ja")
     /// )
@@ -302,26 +269,27 @@ public struct TranslationService: Sendable {
     ///
     /// Each input is translated using ``translate(_:languagePair:)`` with automatic
     /// platform fallback. If any translation in the batch fails, the entire
-    /// operation is canceled and the error is returned.
+    /// operation is canceled and the error is thrown.
     ///
     /// - Parameters:
     ///   - inputs: An array of ``TranslationInput`` values to translate. The array
     ///     must not be empty.
     ///   - languagePair: The source and target languages for all translations.
     ///
-    /// - Returns: A `Result` containing an array of ``Translation`` values on success,
-    ///   or a ``TranslationError`` on failure. The translations correspond positionally
+    /// - Returns: An array of ``Translation`` values corresponding positionally
     ///   to the input array.
     ///
+    /// - Throws: ``TranslationError`` if any translation in the batch fails.
+    ///
     /// - Important: All inputs and the language pair must pass validation. If any
-    ///   argument is malformed, the method returns ``TranslationError/invalidArguments``.
+    ///   argument is malformed, the method throws ``TranslationError/invalidArguments``.
     public func getTranslations(
         _ inputs: [TranslationInput],
         languagePair: LanguagePair
-    ) async -> Result<[Translation], TranslationError> {
+    ) async throws -> [Translation] {
         guard !inputs.isEmpty,
               inputs.allSatisfy(\.isWellFormed),
-              languagePair.isWellFormed else { return .failure(.invalidArguments) }
+              languagePair.isWellFormed else { throw TranslationError.invalidArguments }
 
         // Pre-allocate result slots to preserve order.
         var translations: [Translation?] = Array(
@@ -329,10 +297,9 @@ public struct TranslationService: Sendable {
             count: inputs.count
         )
 
-        return await withTaskGroup(
-            of: (Int, Result<Translation, TranslationError>).self
+        try await withThrowingTaskGroup(
+            of: (Int, Translation).self
         ) { taskGroup in
-            var error: TranslationError?
             var nextIndex = 0
 
             func enqueueNextTask() {
@@ -341,12 +308,12 @@ public struct TranslationService: Sendable {
                 nextIndex += 1
 
                 taskGroup.addTask {
-                    let translateResult = await translate(
+                    let translation = try await translate(
                         inputs[index],
                         languagePair: languagePair
                     )
 
-                    return (index, translateResult)
+                    return (index, translation)
                 }
             }
 
@@ -360,27 +327,19 @@ public struct TranslationService: Sendable {
             }
 
             // As each task finishes, enqueue another until done.
-            while let (index, result) = await taskGroup.next() {
-                switch result {
-                case let .success(translation):
-                    translations[index] = translation
-                    enqueueNextTask()
-
-                case let .failure(_error):
-                    error = _error
-                    taskGroup.cancelAll()
-                }
+            for try await (index, translation) in taskGroup {
+                translations[index] = translation
+                enqueueNextTask()
             }
-
-            if let error { return .failure(error) }
-            guard translations.allSatisfy({ $0 != nil }) else {
-                return .failure(.unknown(
-                    "Batch translation results were incomplete."
-                ))
-            }
-
-            return .success(translations.compactMap(\.self))
         }
+
+        guard translations.allSatisfy({ $0 != nil }) else {
+            throw TranslationError.unknown(
+                "Batch translation results were incomplete."
+            )
+        }
+
+        return translations.compactMap(\.self)
     }
 }
 

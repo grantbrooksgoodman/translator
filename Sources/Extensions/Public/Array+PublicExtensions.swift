@@ -31,7 +31,7 @@ public extension [TranslationInput] {
     /// `false`.
     ///
     /// ``TranslationService/getTranslations(_:languagePair:)`` checks
-    /// this property before processing a batch and returns
+    /// this property before processing a batch and throws
     /// ``TranslationError/invalidArguments`` when it is `false`.
     var isWellFormed: Bool {
         !isEmpty && allSatisfy(\.isWellFormed)

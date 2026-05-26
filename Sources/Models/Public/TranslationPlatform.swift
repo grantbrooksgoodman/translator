@@ -27,7 +27,7 @@ import Foundation
 /// ``TranslationService/translate(_:languagePair:platform:)`` instead:
 ///
 /// ```swift
-/// let result = await TranslationService.shared.translate(
+/// let translation = try await TranslationService.shared.translate(
 ///     TranslationInput("Hello"),
 ///     languagePair: LanguagePair(from: "en", to: "de"),
 ///     platform: .deepL

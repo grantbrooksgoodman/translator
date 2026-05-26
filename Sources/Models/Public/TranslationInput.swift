@@ -54,7 +54,9 @@ public struct TranslationInput: Codable, Hashable, Sendable {
     ///
     /// Returns ``alternate`` if one was provided; otherwise returns
     /// ``original``.
-    public var value: String { alternate ?? original }
+    public var value: String {
+        alternate ?? original
+    }
 
     var withTokenizedDetectorAttributes: TranslationInput {
         typealias Strings = Constants.Strings.Core
@@ -110,7 +112,9 @@ extension TranslationInput: Validatable {
     ///
     /// An input is well-formed when its ``value`` is not blank. Methods
     /// on ``TranslationService`` check this property before attempting a
-    /// translation and return ``TranslationError/invalidArguments`` when
+    /// translation and throw ``TranslationError/invalidArguments`` when
     /// it is `false`.
-    public var isWellFormed: Bool { !value.isBlank }
+    public var isWellFormed: Bool {
+        !value.isBlank
+    }
 }

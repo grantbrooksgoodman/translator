@@ -59,13 +59,13 @@ class BaseTranslator: NSObject {
     func translate(
         _ input: TranslationInput,
         languagePair: LanguagePair
-    ) async -> Result<Translation, TranslationError> {
-        await withCheckedContinuation { continuation in
+    ) async throws -> Translation {
+        try await withCheckedThrowingContinuation { continuation in
             translate(
                 input,
                 languagePair: languagePair
             ) { result in
-                continuation.resume(returning: result)
+                continuation.resume(with: result)
             }
         }
     }
