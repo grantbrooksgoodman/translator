@@ -56,8 +56,10 @@ public struct TranslationService: Sendable {
     ///
     /// Call this method early in the app lifecycle (e.g. at launch) to establish
     /// DNS resolution and TLS sessions ahead of the first translation request.
-    /// This reduces latency on the first call to ``translate(_:languagePair:)``
-    /// without retaining any web views or accumulating cookies.
+    /// This also precompiles the content-blocking rules used by the web view
+    /// pipeline, reducing latency on the first call to
+    /// ``translate(_:languagePair:)`` without retaining any web views or
+    /// accumulating cookies.
     ///
     /// ```swift
     /// TranslationService.shared.prewarm()
@@ -70,6 +72,11 @@ public struct TranslationService: Sendable {
         _ platforms: [TranslationPlatform] = TranslationPlatform.allCases
     ) {
         BaseTranslator.prewarm(platforms)
+
+        // Decode and index the local archive ahead of the first lookup.
+        if Translator.config.archiverDelegate == nil {
+            LocalTranslationArchiver.shared.preload()
+        }
     }
 
     // MARK: - Translate
@@ -80,6 +87,9 @@ public struct TranslationService: Sendable {
     /// The service attempts translation using Google Translate first. If Google returns
     /// an unchanged result or fails, it falls back to DeepL, then to Reverso, and
     /// finally to Lara.
+    ///
+    /// Concurrent calls for the same input and language pair are coalesced into
+    /// a single request; duplicate callers receive the shared result.
     ///
     /// ```swift
     /// do {
@@ -104,27 +114,17 @@ public struct TranslationService: Sendable {
         _ input: TranslationInput,
         languagePair: LanguagePair
     ) async throws -> Translation {
-        let fallbackPlatforms: [TranslationPlatform] = [
-            .google,
-            .deepL,
-            .reverso,
-        ]
-
-        for platform in fallbackPlatforms {
-            if let translation = try? await translate(
+        // Coalesce concurrent requests for the same input and language pair
+        // into a single platform request; duplicate callers await the shared
+        // result rather than each spawning their own network work.
+        try await InFlightTranslationCoordinator.shared.task(
+            forKey: "\(input.value.encodedHash)|\(languagePair.string)"
+        ) {
+            try await translateWithFallback(
                 input,
-                languagePair: languagePair,
-                platform: platform
-            ), translation.output.normalized != input.value.normalized {
-                return translation
-            }
-        }
-
-        return try await translate(
-            input,
-            languagePair: languagePair,
-            platform: .lara
-        )
+                languagePair: languagePair
+            )
+        }.value
     }
 
     /// Translates the given input into the target language using a specific
@@ -137,10 +137,10 @@ public struct TranslationService: Sendable {
     /// - If the input contains no Unicode letter characters, the original value
     ///   is returned as-is.
     /// - If the source and target languages are the same, the input is returned unchanged.
-    /// - If the input text is already recognized as the target language with high
-    ///   confidence, the input is returned unchanged.
     /// - If a cached translation exists for the input and language pair, the cached
     ///   result is returned.
+    /// - If the input text is already recognized as the target language with high
+    ///   confidence, the input is returned unchanged.
     ///
     /// Addresses, links, and phone numbers detected within the input are tokenized
     /// and preserved through translation.
@@ -167,15 +167,7 @@ public struct TranslationService: Sendable {
 
         let translationArchiver = Translator.config.archiverDelegate ?? LocalTranslationArchiver.shared
 
-        let hasUnicodeLetters = input.value.containsLetters
-        let sameInputOutputLanguage = await LanguageRecognitionService.shared.matchConfidence(
-            for: input.value,
-            inLanguage: languagePair.to
-        ) > 0.8
-
-        if !hasUnicodeLetters ||
-            languagePair.isIdempotent ||
-            sameInputOutputLanguage {
+        if !input.value.containsLetters || languagePair.isIdempotent {
             return .init(
                 input: input,
                 output: input.value.replacingOccurrences(
@@ -186,6 +178,8 @@ public struct TranslationService: Sendable {
             )
         }
 
+        // Consult the archive before running language recognition; cache hits
+        // shouldn't pay for dominant-language analysis and spell-checking.
         if let archivedTranslation = translationArchiver.getValue(
             inputValueEncodedHash: input.value.encodedHash,
             languagePair: languagePair
@@ -209,6 +203,20 @@ public struct TranslationService: Sendable {
             return .init(
                 input: input,
                 output: archivedTranslation.output,
+                languagePair: languagePair
+            )
+        }
+
+        if await LanguageRecognitionService.shared.matchConfidence(
+            for: input.value,
+            inLanguage: languagePair.to
+        ) > 0.8 {
+            return .init(
+                input: input,
+                output: input.value.replacingOccurrences(
+                    of: Strings.processingDelimiter,
+                    with: ""
+                ),
                 languagePair: languagePair
             )
         }
@@ -244,6 +252,33 @@ public struct TranslationService: Sendable {
 
         translationArchiver.addValue(processedTranslation)
         return processedTranslation
+    }
+
+    private func translateWithFallback(
+        _ input: TranslationInput,
+        languagePair: LanguagePair
+    ) async throws -> Translation {
+        let fallbackPlatforms: [TranslationPlatform] = [
+            .google,
+            .deepL,
+            .reverso,
+        ]
+
+        for platform in fallbackPlatforms {
+            if let translation = try? await translate(
+                input,
+                languagePair: languagePair,
+                platform: platform
+            ), translation.output.normalized != input.value.normalized {
+                return translation
+            }
+        }
+
+        return try await translate(
+            input,
+            languagePair: languagePair,
+            platform: .lara
+        )
     }
 
     // MARK: - Get Translations

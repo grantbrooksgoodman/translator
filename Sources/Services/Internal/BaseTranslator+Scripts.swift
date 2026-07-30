@@ -11,6 +11,48 @@ import Foundation
 @preconcurrency import WebKit
 
 extension BaseTranslator {
+    // MARK: - Properties
+
+    private static let allContentRules: [String: String] = [
+        "no-fonts": noFontsRule,
+        "no-images": noImagesRule,
+        "no-trackers": blockThirdPartyCookiesRule,
+    ]
+
+    private static let blockThirdPartyCookiesRule = #"""
+    [
+      { "trigger": { "url-filter": "/gtm\\.js", "if-domain": ["googletagmanager.com","www.googletagmanager.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+
+      { "trigger": { "url-filter": "/analytics\\.js", "if-domain": ["google-analytics.com","www.google-analytics.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+      { "trigger": { "url-filter": "/gtag/js",        "if-domain": ["google-analytics.com","www.google-analytics.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+      { "trigger": { "url-filter": "/collect\\?.*",   "if-domain": ["google-analytics.com","www.google-analytics.com","stats.g.doubleclick.net"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+
+      { "trigger": { "url-filter": "/", "if-domain": ["doubleclick.net","*.doubleclick.net"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+
+      { "trigger": { "url-filter": "/tr", "if-domain": ["facebook.com","www.facebook.com"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+
+      { "trigger": { "url-filter": "/", "if-domain": ["hotjar.com","*.hotjar.com"], "load-type": ["third-party"] }, "action": { "type": "block" } },
+
+      { "trigger": { "url-filter": "/analytics\\.js", "if-domain": ["segment.com","cdn.segment.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } }
+    ]
+    """#
+
+    private static let noFontsRule = """
+    [{
+      "trigger": { "url-filter": ".*", "resource-type": ["font"] },
+      "action": { "type": "block" }
+    }]
+    """
+
+    private static let noImagesRule = """
+    [{
+      "trigger": { "url-filter": ".*", "resource-type": ["image","media"] },
+      "action": { "type": "block" }
+    }]
+    """
+
+    private static var compiledRuleLists = [String: WKContentRuleList]()
+
     // MARK: - Scripts
 
     func addBlockContentFocusScript() {
@@ -185,47 +227,37 @@ extension BaseTranslator {
     // MARK: - Rules
 
     func enableBlockThirdPartyCookiesRule() {
-        let blockThirdPartyCookiesRule = #"""
-        [
-          { "trigger": { "url-filter": "/gtm\\.js", "if-domain": ["googletagmanager.com","www.googletagmanager.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-
-          { "trigger": { "url-filter": "/analytics\\.js", "if-domain": ["google-analytics.com","www.google-analytics.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-          { "trigger": { "url-filter": "/gtag/js",        "if-domain": ["google-analytics.com","www.google-analytics.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-          { "trigger": { "url-filter": "/collect\\?.*",   "if-domain": ["google-analytics.com","www.google-analytics.com","stats.g.doubleclick.net"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-
-          { "trigger": { "url-filter": "/", "if-domain": ["doubleclick.net","*.doubleclick.net"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-
-          { "trigger": { "url-filter": "/tr", "if-domain": ["facebook.com","www.facebook.com"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-
-          { "trigger": { "url-filter": "/", "if-domain": ["hotjar.com","*.hotjar.com"], "load-type": ["third-party"] }, "action": { "type": "block" } },
-
-          { "trigger": { "url-filter": "/analytics\\.js", "if-domain": ["segment.com","cdn.segment.com"], "resource-type": ["script"], "load-type": ["third-party"] }, "action": { "type": "block" } }
-        ]
-        """#
-
-        addRule(name: "no-trackers", blockThirdPartyCookiesRule)
-    }
-
-    func enableNoImagesRule() {
-        let noImagesRule = """
-        [{
-          "trigger": { "url-filter": ".*", "resource-type": ["image","media"] },
-          "action": { "type": "block" }
-        }]
-        """
-
-        addRule(name: "no-images", noImagesRule)
+        addRule(
+            name: "no-trackers",
+            Self.blockThirdPartyCookiesRule
+        )
     }
 
     func enableNoFontsRule() {
-        let noFontsRule = """
-        [{
-          "trigger": { "url-filter": ".*", "resource-type": ["font"] },
-          "action": { "type": "block" }
-        }]
-        """
+        addRule(
+            name: "no-fonts",
+            Self.noFontsRule
+        )
+    }
 
-        addRule(name: "no-fonts", noFontsRule)
+    func enableNoImagesRule() {
+        addRule(
+            name: "no-images",
+            Self.noImagesRule
+        )
+    }
+
+    /// Compiles all content rule lists into the in-memory cache ahead of time
+    /// so the first translation doesn't pay the compilation cost, and so rule
+    /// lists attach synchronously – before the request loads – on every
+    /// translation thereafter.
+    static func precompileContentRuleLists() {
+        for (name, rule) in allContentRules {
+            compileRuleListIfNeeded(
+                name: name,
+                rule
+            ) { _ in }
+        }
     }
 
     // MARK: - Auxiliary
@@ -234,23 +266,13 @@ extension BaseTranslator {
         name: String,
         _ rule: String
     ) {
-        WKContentRuleListStore.default().compileContentRuleList(
-            forIdentifier: name,
-            encodedContentRuleList: rule
-        ) { ruleList, error in
-            if let ruleList {
-                self.webView?.configuration.userContentController.add(ruleList)
-            } else {
-                var descriptor = "An unknown error occurred."
-                if let error { descriptor = Translator.descriptor(error) }
-                Translator.config.loggerDelegate?.log(
-                    descriptor,
-                    sender: self,
-                    fileName: #file,
-                    function: #function,
-                    line: #line
-                )
-            }
+        Self.compileRuleListIfNeeded(
+            name: name,
+            rule
+        ) { [weak self] ruleList in
+            guard let self,
+                  let ruleList else { return }
+            webView?.configuration.userContentController.add(ruleList)
         }
     }
 
@@ -267,5 +289,36 @@ extension BaseTranslator {
                 injectionTime: injectionTime,
                 forMainFrameOnly: forMainFrameOnly
             ))
+    }
+
+    private static func compileRuleListIfNeeded(
+        name: String,
+        _ rule: String,
+        completion: @escaping @MainActor (WKContentRuleList?) -> Void
+    ) {
+        if let compiledRuleList = compiledRuleLists[name] {
+            return completion(compiledRuleList)
+        }
+
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: name,
+            encodedContentRuleList: rule
+        ) { ruleList, error in
+            if let ruleList {
+                compiledRuleLists[name] = ruleList
+            } else {
+                var descriptor = "An unknown error occurred."
+                if let error { descriptor = Translator.descriptor(error) }
+                Translator.config.loggerDelegate?.log(
+                    descriptor,
+                    sender: BaseTranslator.self,
+                    fileName: #file,
+                    function: #function,
+                    line: #line
+                )
+            }
+
+            completion(ruleList)
+        }
     }
 }

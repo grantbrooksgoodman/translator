@@ -45,27 +45,61 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
     private let defaults = UserDefaults.standard
     private let ioLock = NSRecursiveLock()
     private let jsonDecoder = JSONDecoder()
-    private let jsonEncoder = JSONEncoder()
+
+    /// Serializes disk writes off the calling thread; lookups and mutations
+    /// operate on the in-memory archive and never wait for the disk.
+    private let persistenceQueue = DispatchQueue(
+        label: "us.neotechnica.translator.archiver-persistence",
+        qos: .utility
+    )
+
+    /// Maps `"<input value hash>|<source language>-<target language>"` to its
+    /// translation for constant-time lookups, avoiding a per-entry hash
+    /// computation on every query.
+    private var archiveIndex = [String: Translation]()
+
+    /// The decoded archive, loaded from disk at most once per launch.
+    private var cachedArchive: Set<Translation>?
 
     // MARK: - Init
 
     private init() {}
 
+    // MARK: - Preload
+
+    /// Loads and indexes the archive from disk ahead of the first lookup.
+    ///
+    /// Call this method early in the app lifecycle (e.g. at launch) to move
+    /// the one-time cost of decoding and indexing the archive off the first
+    /// translation request. Calling it more than once has no effect.
+    public func preload() {
+        persistenceQueue.async {
+            self.ioLock.lock()
+            defer { self.ioLock.unlock() }
+            _ = self.loadArchiveIfNeeded()
+        }
+    }
+
     // MARK: - Addition
 
     /// Adds a single translation to the archive.
     ///
-    /// If a translation with the same input already exists in the archive, it is
-    /// replaced with the new value.
+    /// If a translation with the same input and language pair already exists
+    /// in the archive, it is replaced with the new value.
     ///
     /// - Parameter translation: The ``Translation`` to store.
     public func addValue(_ translation: Translation) {
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        var archive = getArchive()
-        archive.insert(translation)
-        setArchive(archive)
+        var archive = loadArchiveIfNeeded()
+        insert(
+            translation,
+            into: &archive
+        )
+
+        cachedArchive = archive
+        persistArchive(archive)
     }
 
     /// Adds a set of translations to the archive.
@@ -78,9 +112,16 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        var archive = getArchive()
-        archive.formUnion(translations)
-        setArchive(archive)
+        var archive = loadArchiveIfNeeded()
+        for translation in translations {
+            insert(
+                translation,
+                into: &archive
+            )
+        }
+
+        cachedArchive = archive
+        persistArchive(archive)
     }
 
     // MARK: - Retrieval
@@ -89,12 +130,11 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
     /// language pair.
     ///
     /// The archiver matches translations by comparing the encoded hash of the
-    /// original input value and the target language of the language pair.
+    /// original input value and both languages of the language pair.
     ///
     /// - Parameters:
     ///   - hash: The encoded hash of the original input string to look up.
-    ///   - languagePair: The language pair to match against. Only the target
-    ///     language is used for matching.
+    ///   - languagePair: The language pair to match against.
     ///
     /// - Returns: The matching ``Translation``, or `nil` if no cached
     ///   translation is found.
@@ -105,11 +145,11 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        let archive = getArchive()
-        return archive.first(where: {
-            $0.input.value.encodedHash == hash &&
-                $0.languagePair.to == languagePair.to
-        })
+        _ = loadArchiveIfNeeded()
+        return archiveIndex[indexKey(
+            inputValueEncodedHash: hash,
+            languagePair: languagePair
+        )]
     }
 
     // MARK: - Removal
@@ -122,7 +162,10 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
     public func clearArchive() {
         ioLock.lock()
         defer { ioLock.unlock() }
-        setArchive([])
+
+        cachedArchive = []
+        archiveIndex = [:]
+        persistArchive([])
     }
 
     /// Removes a cached translation matching the given input hash and
@@ -141,25 +184,72 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        if let value = getValue(
+        guard let value = getValue(
             inputValueEncodedHash: hash,
             languagePair: languagePair
-        ) {
-            var archive = getArchive()
-            archive.remove(value)
-            setArchive(archive)
-        }
+        ) else { return }
+
+        var archive = loadArchiveIfNeeded()
+        archive.remove(value)
+        archiveIndex[indexKey(
+            inputValueEncodedHash: hash,
+            languagePair: languagePair
+        )] = nil
+
+        cachedArchive = archive
+        persistArchive(archive)
     }
 
     // MARK: - Auxiliary
 
-    private func getArchive() -> Set<Translation> {
+    private func indexKey(
+        inputValueEncodedHash hash: String,
+        languagePair: LanguagePair
+    ) -> String {
+        "\(hash)|\(languagePair.string)"
+    }
+
+    private func indexKey(for translation: Translation) -> String {
+        indexKey(
+            inputValueEncodedHash: translation.input.value.encodedHash,
+            languagePair: translation.languagePair
+        )
+    }
+
+    /// Inserts the translation into both the archive and the index, replacing
+    /// any existing translation for the same input and language pair.
+    private func insert(
+        _ translation: Translation,
+        into archive: inout Set<Translation>
+    ) {
+        let key = indexKey(for: translation)
+        if let existingTranslation = archiveIndex[key] {
+            archive.remove(existingTranslation)
+        }
+
+        archive.insert(translation)
+        archiveIndex[key] = translation
+    }
+
+    private func loadArchiveIfNeeded() -> Set<Translation> {
+        if let cachedArchive { return cachedArchive }
+
+        var archive = Set<Translation>()
+        defer {
+            cachedArchive = archive
+            archiveIndex = archive.reduce(into: [String: Translation]()) { index, translation in
+                index[indexKey(for: translation)] = translation
+            }
+        }
+
         guard let data = defaults.object(
             forKey: Strings.archiveUserDefaultsKey
-        ) as? Data else { return [] }
+        ) as? Data else {
+            return archive
+        }
 
         do {
-            return try jsonDecoder.decode(
+            archive = try jsonDecoder.decode(
                 Set<Translation>.self,
                 from: data
             )
@@ -171,24 +261,30 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
                 function: #function,
                 line: #line
             )
-            return []
         }
+
+        return archive
     }
 
-    private func setArchive(_ archive: Set<Translation>) {
-        do {
-            try defaults.set(
-                jsonEncoder.encode(archive),
-                forKey: Strings.archiveUserDefaultsKey
-            )
-        } catch {
-            Translator.config.loggerDelegate?.log(
-                Translator.descriptor(error),
-                sender: self,
-                fileName: #fileID,
-                function: #function,
-                line: #line
-            )
+    /// Encodes and writes the archive on a background queue, keeping disk
+    /// I/O off the translation path. Writes are serialized in submission
+    /// order, so the last snapshot always wins.
+    private func persistArchive(_ archive: Set<Translation>) {
+        persistenceQueue.async {
+            do {
+                try self.defaults.set(
+                    JSONEncoder().encode(archive),
+                    forKey: Strings.archiveUserDefaultsKey
+                )
+            } catch {
+                Translator.config.loggerDelegate?.log(
+                    Translator.descriptor(error),
+                    sender: self,
+                    fileName: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
 }

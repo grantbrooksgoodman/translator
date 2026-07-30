@@ -172,6 +172,7 @@ enum Constants {
             static let nsHelpAnchorErrorUserInfoKey = "NSHelpAnchor"
             static let processingDelimiter = "⌘"
             static let processingToken = "⁂"
+            static let resultObserverMessageHandlerName = "translatorResultObserver"
         }
 
         /* MARK: LocalTranslationArchiver */

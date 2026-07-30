@@ -62,26 +62,24 @@ final class LaraTranslator: BaseTranslator, Translatorable {
         guard let translationInput,
               let translationLanguagePair else { return failForMissingValues() }
 
-        // Listen in the main frame for the postMessage sent by the iframe script.
+        // The result observer script (injected at document start) listens for
+        // the iframe's postMessage and buffers it on the main frame's window.
+        // Reading the buffer – rather than attaching a listener here – means
+        // results relayed before navigation finishes are never lost.
         let javaScript = """
+        if (window.__translatorResult) { return window.__translatorResult; }
+
         return await new Promise(function(resolve) {
-            function handler(event) {
-                try {
-                    var data = JSON.parse(event.data);
-                    if (data.type === 'laraTranslation' && data.text) {
-                        window.removeEventListener('message', handler);
-                        clearTimeout(timeout);
-                        resolve(data.text);
-                    }
-                } catch(e) {}
-            }
-
-            window.addEventListener('message', handler);
-
-            var timeout = setTimeout(function() {
-                window.removeEventListener('message', handler);
-                resolve('');
-            }, 9000);
+            var elapsedMilliseconds = 0;
+            var timer = setInterval(function() {
+                if (window.__translatorResult) {
+                    clearInterval(timer);
+                    resolve(window.__translatorResult);
+                } else if ((elapsedMilliseconds += 100) >= 9000) {
+                    clearInterval(timer);
+                    resolve('');
+                }
+            }, 100);
         });
         """
 

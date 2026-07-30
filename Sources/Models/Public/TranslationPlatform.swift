@@ -72,8 +72,8 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
         switch self {
         case .deepL: DeepLTranslator()
         case .google: GoogleTranslator()
-        case .reverso: ReversoTranslator()
         case .lara: LaraTranslator()
+        case .reverso: ReversoTranslator()
         }
     }
 
@@ -90,34 +90,92 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
         let urlString = switch self {
         case .deepL: "https://www.deepl.com/en/translator"
         case .google: "https://translate.google.com/?hl=en"
-        case .reverso: "https://www.reverso.net/text-translation"
         case .lara: "https://laratranslate.com/translate"
+        case .reverso: "https://www.reverso.net/text-translation"
         }
 
         return .init(string: urlString)
+    }
+
+    /// A script injected into the main frame at document start which notifies
+    /// the native side the moment the translation result appears in the DOM,
+    /// rather than waiting for the page to finish loading entirely.
+    var resultObserverScript: String? {
+        typealias Strings = Constants.Strings.Core
+
+        // Lara renders its result inside a cross-origin iframe which relays it
+        // to the main frame via postMessage (see `LaraTranslator`). Buffer the
+        // relayed result and notify the native side as soon as it arrives.
+        guard self != .lara else {
+            return """
+            (function() {
+              window.addEventListener('message', function(event) {
+                try {
+                  var data = JSON.parse(event.data);
+                  if (data.type === 'laraTranslation' && data.text) {
+                    window.__translatorResult = data.text;
+                    try { window.webkit.messageHandlers.\(Strings.resultObserverMessageHandlerName).postMessage(''); } catch (e) {}
+                  }
+                } catch (e) {}
+              });
+            })();
+            """
+        }
+
+        let readyCheck = switch self {
+        case .deepL: """
+            var results = document.querySelectorAll('[aria-labelledby="translation-results-heading"]');
+            var element = results[results.length - 1];
+            if (element && element.innerText && element.innerText.trim()) { return true; }
+            results = document.querySelectorAll('[aria-labelledby="translation-target-heading"]');
+            element = results[results.length - 1];
+            return !!(element && element.innerText && element.innerText.trim());
+            """
+
+        case .google: """
+            var element = document.getElementsByClassName('lRu31')[0];
+            return !!(element && element.innerText && element.innerText.trim());
+            """
+
+        case .lara: ""
+
+        case .reverso: """
+            var element = document.getElementsByClassName('textarea translation-box__translated-text translation-box__translated-text_favorite')[0] ||
+                document.getElementsByClassName('translation-input__main translation-input__result')[0];
+            return !!(element && element.innerText && element.innerText.trim() && element.innerText.trim() !== '!');
+            """
+        }
+
+        return """
+        (function() {
+          function isReady() {
+            try {
+              \(readyCheck)
+            } catch (e) { return false; }
+          }
+          function notify() {
+            try { window.webkit.messageHandlers.\(Strings.resultObserverMessageHandlerName).postMessage(''); } catch (e) {}
+          }
+          function observe() {
+            if (isReady()) { return notify(); }
+            var observer = new MutationObserver(function() {
+              if (isReady()) {
+                observer.disconnect();
+                notify();
+              }
+            });
+            observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+            setTimeout(function() { observer.disconnect(); }, 15000);
+          }
+          if (document.documentElement) { observe(); }
+          else { document.addEventListener('DOMContentLoaded', observe); }
+        })();
+        """
     }
 
     // MARK: - Methods
 
-    func requestURL(
-        _ text: String,
-        languagePair: LanguagePair
-    ) -> URL? {
-        guard let source = identifier(for: languagePair.from),
-              let target = identifier(for: languagePair.to),
-              let text = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
-
-        let urlString = switch self {
-        case .deepL: "https://www.deepl.com/en/translator#\(source)/\(target)/\(text)"
-        case .google: "https://translate.google.com/?hl=en&sl=\(source)&tl=\(target)&text=\(text)&op=translate"
-        case .reverso: "https://www.reverso.net/text-translation#sl=\(source)&tl=\(target)&text=\(text)"
-        case .lara: "https://laratranslate.com/translate?source=\(source)&text=\(text)&target=\(target)"
-        }
-
-        return .init(string: urlString)
-    }
-
-    private func identifier(for languageCode: String) -> String? {
+    func identifier(for languageCode: String) -> String? {
         let languageCode = languageCode.lowercasedTrimmingWhitespaceAndNewlines
 
         switch self {
@@ -179,5 +237,24 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
 
             return languageCodeMap[languageCode]
         }
+    }
+
+    func requestURL(
+        _ text: String,
+        languagePair: LanguagePair
+    ) -> URL? {
+        guard let source = identifier(for: languagePair.from),
+              let target = identifier(for: languagePair.to),
+              let text = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+
+        let urlString = switch self {
+        case .deepL:
+            "https://www.deepl.com/en/translator#\(source)/\(target)/\(text)"
+        case .google: "https://translate.google.com/?hl=en&sl=\(source)&tl=\(target)&text=\(text)&op=translate"
+        case .lara: "https://laratranslate.com/translate?source=\(source)&text=\(text)&target=\(target)"
+        case .reverso: "https://www.reverso.net/text-translation#sl=\(source)&tl=\(target)&text=\(text)"
+        }
+
+        return .init(string: urlString)
     }
 }

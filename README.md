@@ -1,6 +1,6 @@
 # Translator
 
-A Swift package for translating text between languages using web-based translation platforms.
+A framework for translating text between languages using web-based translation platforms.
 
 Translator coordinates between Google Translate, DeepL, Lara, and Reverso to produce translations, automatically falling back to alternative platforms when a translation fails or returns an unchanged result. It caches completed translations locally, recognizes input languages to avoid redundant work, and preserves addresses, links, and phone numbers through the translation process.
 
@@ -72,7 +72,7 @@ func application(
 }
 ```
 
-This establishes DNS resolution and TLS sessions to each translation platform without retaining any web views or accumulating cookies. Subsequent translation requests reuse these connections through the shared WebKit networking layer.
+This establishes DNS resolution and TLS sessions to each translation platform and precompiles the content-blocking rules used by the web view pipeline, all without retaining any web views. Web activity is confined to a private, memory-backed data store, so prewarming leaves your app's cookies and website data untouched. Subsequent translation requests reuse these connections through that same store.
 
 To prewarm only specific platforms, pass them explicitly:
 
@@ -235,10 +235,10 @@ When no logger is registered, diagnostic messages are silently discarded.
 
 Translator adopts Swift 6 strict concurrency. All public types conform to `Sendable`, and the primary interfaces are safe to use from any actor or task context:
 
-- **[`TranslationService`](Sources/Services/Public/TranslationService.swift)** is a `Sendable` structure. Its methods are asynchronous and safe to call from any context.
-- **[`LanguageRecognitionService`](Sources/Services/Public/LanguageRecognitionService.swift)** is an actor. Access its methods with `await`.
-- **[`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift)** uses internal locking and is safe to call from any thread.
-- **[`Translator.Config`](Sources/Translator.swift)** uses internal locking. Delegate registration and access are safe from any thread.
+- [`TranslationService`](Sources/Services/Public/TranslationService.swift) is a `Sendable` structure. Its methods are asynchronous and safe to call from any context.
+- [`LanguageRecognitionService`](Sources/Services/Public/LanguageRecognitionService.swift) is an actor. Access its methods with `await`.
+- [`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift) uses internal locking and is safe to call from any thread.
+- [`Translator.Config`](Sources/Translator.swift) uses internal locking. Delegate registration and access are safe from any thread.
 
 ---
 
