@@ -25,8 +25,8 @@ final class Timeout {
         Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard let self,
-                  self.isValid else { return }
-            self.invoke()
+                  isValid else { return }
+            invoke()
         }
     }
 

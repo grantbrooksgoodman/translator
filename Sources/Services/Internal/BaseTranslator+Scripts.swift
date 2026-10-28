@@ -111,8 +111,12 @@ extension BaseTranslator {
         let denyPermissions = """
         (function(){
           // Notifications
-          try { Notification.requestPermission = () => Promise.resolve('denied'); } catch {}
-          Object.defineProperty(Notification, 'permission', { get: ()=>'denied' });
+          try {
+            if (window.Notification) {
+              Notification.requestPermission = () => Promise.resolve('denied');
+              Object.defineProperty(Notification, 'permission', { get: ()=>'denied' });
+            }
+          } catch {}
 
           // Generic permissions queries
           if (navigator && navigator.permissions && navigator.permissions.query) {

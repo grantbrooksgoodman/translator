@@ -97,7 +97,9 @@ public actor LanguageRecognitionService {
             return cachedValue
         }
 
-        func sanitized(_ string: String) -> String { string.lowercasedTrimmingWhitespaceAndNewlines }
+        func sanitized(_ string: String) -> String {
+            string.lowercasedTrimmingWhitespaceAndNewlines
+        }
 
         let languageRecognizer = NLLanguageRecognizer()
         var confidenceValue: Float = 0

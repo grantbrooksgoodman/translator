@@ -7,6 +7,7 @@
 
 /* Native */
 import Foundation
+import UIKit
 
 /// A persistent, on-device store for caching completed translations.
 ///
@@ -24,6 +25,12 @@ import Foundation
 /// All read and write operations are serialized using an internal lock,
 /// making the archiver safe to call from any thread or concurrency context.
 ///
+/// Lookups and changes operate on an in-memory copy of the archive. Changes
+/// are written to disk together, about a second after the first of them,
+/// and any pending write completes when the app enters the background or
+/// terminates. Adding a translation that the archive already holds writes
+/// nothing.
+///
 /// - Note: To provide a custom caching strategy, implement the
 ///   ``TranslationArchiverDelegate`` protocol and register your implementation
 ///   using ``Translator/Config/registerArchiverDelegate(_:)``.
@@ -35,6 +42,7 @@ import Foundation
 public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unchecked Sendable {
     // MARK: - Type Aliases
 
+    private typealias Floats = Constants.CGFloats.LocalTranslationArchiver
     private typealias Strings = Constants.Strings.LocalTranslationArchiver
 
     // MARK: - Properties
@@ -55,15 +63,36 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
 
     /// Maps `"<input value hash>|<source language>-<target language>"` to its
     /// translation for constant-time lookups, avoiding a per-entry hash
-    /// computation on every query.
+    /// computation on every query. The index is the archive's only in-memory
+    /// copy; writes persist its values.
     private var archiveIndex = [String: Translation]()
 
-    /// The decoded archive, loaded from disk at most once per launch.
-    private var cachedArchive: Set<Translation>?
+    /// Whether the archive has been loaded from disk, which happens at most
+    /// once per launch.
+    private var isArchiveLoaded = false
+
+    /// Whether a write of the archive is scheduled and has yet to run.
+    private var isWritePending = false
 
     // MARK: - Init
 
-    private init() {}
+    private init() {
+        // A pending write reaches the disk before the app can be suspended
+        // or terminated.
+        for name in [
+            UIApplication.didEnterBackgroundNotification,
+            UIApplication.willTerminateNotification,
+        ] {
+            _ = NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self else { return }
+                persistenceQueue.sync { self.persistPendingArchive() }
+            }
+        }
+    }
 
     // MARK: - Preload
 
@@ -76,7 +105,7 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         persistenceQueue.async {
             self.ioLock.lock()
             defer { self.ioLock.unlock() }
-            _ = self.loadArchiveIfNeeded()
+            self.loadArchiveIfNeeded()
         }
     }
 
@@ -92,14 +121,9 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        var archive = loadArchiveIfNeeded()
-        insert(
-            translation,
-            into: &archive
-        )
-
-        cachedArchive = archive
-        persistArchive(archive)
+        loadArchiveIfNeeded()
+        guard insert(translation) else { return }
+        schedulePersistence()
     }
 
     /// Adds a set of translations to the archive.
@@ -112,16 +136,14 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        var archive = loadArchiveIfNeeded()
+        loadArchiveIfNeeded()
+        var didChangeArchive = false
         for translation in translations {
-            insert(
-                translation,
-                into: &archive
-            )
+            didChangeArchive = insert(translation) || didChangeArchive
         }
 
-        cachedArchive = archive
-        persistArchive(archive)
+        guard didChangeArchive else { return }
+        schedulePersistence()
     }
 
     // MARK: - Retrieval
@@ -145,7 +167,7 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        _ = loadArchiveIfNeeded()
+        loadArchiveIfNeeded()
         return archiveIndex[indexKey(
             inputValueEncodedHash: hash,
             languagePair: languagePair
@@ -163,9 +185,9 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        cachedArchive = []
         archiveIndex = [:]
-        persistArchive([])
+        isArchiveLoaded = true
+        schedulePersistence()
     }
 
     /// Removes a cached translation matching the given input hash and
@@ -184,20 +206,13 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         ioLock.lock()
         defer { ioLock.unlock() }
 
-        guard let value = getValue(
+        loadArchiveIfNeeded()
+        guard archiveIndex.removeValue(forKey: indexKey(
             inputValueEncodedHash: hash,
             languagePair: languagePair
-        ) else { return }
+        )) != nil else { return }
 
-        var archive = loadArchiveIfNeeded()
-        archive.remove(value)
-        archiveIndex[indexKey(
-            inputValueEncodedHash: hash,
-            languagePair: languagePair
-        )] = nil
-
-        cachedArchive = archive
-        persistArchive(archive)
+        schedulePersistence()
     }
 
     // MARK: - Auxiliary
@@ -216,42 +231,56 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
         )
     }
 
-    /// Inserts the translation into both the archive and the index, replacing
-    /// any existing translation for the same input and language pair.
-    private func insert(
-        _ translation: Translation,
-        into archive: inout Set<Translation>
-    ) {
+    /// Inserts the translation into the index, replacing any existing
+    /// translation for the same input and language pair. Returns `false`
+    /// when the index already holds the translation.
+    private func insert(_ translation: Translation) -> Bool {
         let key = indexKey(for: translation)
-        if let existingTranslation = archiveIndex[key] {
-            archive.remove(existingTranslation)
-        }
-
-        archive.insert(translation)
+        guard archiveIndex[key] != translation else { return false }
         archiveIndex[key] = translation
+        return true
     }
 
-    private func loadArchiveIfNeeded() -> Set<Translation> {
-        if let cachedArchive { return cachedArchive }
-
-        var archive = Set<Translation>()
-        defer {
-            cachedArchive = archive
-            archiveIndex = archive.reduce(into: [String: Translation]()) { index, translation in
-                index[indexKey(for: translation)] = translation
-            }
-        }
+    private func loadArchiveIfNeeded() {
+        guard !isArchiveLoaded else { return }
+        isArchiveLoaded = true
 
         guard let data = defaults.object(
             forKey: Strings.archiveUserDefaultsKey
-        ) as? Data else {
-            return archive
-        }
+        ) as? Data else { return }
 
         do {
-            archive = try jsonDecoder.decode(
+            archiveIndex = try jsonDecoder.decode(
                 Set<Translation>.self,
                 from: data
+            ).reduce(into: [String: Translation]()) { index, translation in
+                index[indexKey(for: translation)] = translation
+            }
+        } catch {
+            Translator.config.loggerDelegate?.log(
+                Translator.descriptor(error),
+                sender: self,
+                fileName: #fileID,
+                function: #function,
+                line: #line
+            )
+        }
+    }
+
+    /// Encodes and writes the archive if a write is pending, keeping disk
+    /// I/O off the translation path. Runs on the persistence queue.
+    private func persistPendingArchive() {
+        let archive: Set<Translation>? = ioLock.withLock {
+            guard isWritePending else { return nil }
+            isWritePending = false
+            return Set(archiveIndex.values)
+        }
+
+        guard let archive else { return }
+        do {
+            try defaults.set(
+                JSONEncoder().encode(archive),
+                forKey: Strings.archiveUserDefaultsKey
             )
         } catch {
             Translator.config.loggerDelegate?.log(
@@ -262,29 +291,19 @@ public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unche
                 line: #line
             )
         }
-
-        return archive
     }
 
-    /// Encodes and writes the archive on a background queue, keeping disk
-    /// I/O off the translation path. Writes are serialized in submission
-    /// order, so the last snapshot always wins.
-    private func persistArchive(_ archive: Set<Translation>) {
-        persistenceQueue.async {
-            do {
-                try self.defaults.set(
-                    JSONEncoder().encode(archive),
-                    forKey: Strings.archiveUserDefaultsKey
-                )
-            } catch {
-                Translator.config.loggerDelegate?.log(
-                    Translator.descriptor(error),
-                    sender: self,
-                    fileName: #fileID,
-                    function: #function,
-                    line: #line
-                )
-            }
+    /// Schedules a write of the archive on the persistence queue. Every change
+    /// made before the write runs is coalesced into it, so a burst of changes
+    /// encodes the archive once. Call while holding the I/O lock.
+    private func schedulePersistence() {
+        guard !isWritePending else { return }
+        isWritePending = true
+
+        persistenceQueue.asyncAfter(
+            deadline: .now() + .milliseconds(Int(Floats.writeDelayMilliseconds))
+        ) {
+            self.persistPendingArchive()
         }
     }
 }

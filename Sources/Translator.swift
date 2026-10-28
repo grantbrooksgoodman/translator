@@ -160,6 +160,16 @@ public extension Translator {
 // MARK: - Constants
 
 enum Constants {
+    // MARK: - CGFloat
+
+    enum CGFloats {
+        /* MARK: LocalTranslationArchiver */
+
+        enum LocalTranslationArchiver {
+            static let writeDelayMilliseconds: CGFloat = 1000
+        }
+    }
+
     // MARK: - String
 
     enum Strings {

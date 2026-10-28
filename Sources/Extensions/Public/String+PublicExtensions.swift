@@ -14,7 +14,9 @@ extension String: EncodedHashable {
     /// For `String`, the hash factors array contains only the string
     /// itself. The framework uses the resulting encoded hash to identify
     /// cached translations in the archive.
-    public var hashFactors: [String] { [self] }
+    public var hashFactors: [String] {
+        [self]
+    }
 }
 
 public extension String {
@@ -33,11 +35,13 @@ public extension String {
     var containsLetters: Bool {
         unicodeScalars.contains { scalar in
             CharacterSet.letters.contains(scalar)
-                && !(CharacterSet.controlCharacters.contains(scalar)
-                    || CharacterSet.illegalCharacters.contains(scalar)
-                    || CharacterSet.nonBaseCharacters.contains(scalar)
-                    || CharacterSet.punctuationCharacters.contains(scalar)
-                    || CharacterSet.symbols.contains(scalar))
+                && !(
+                    CharacterSet.controlCharacters.contains(scalar)
+                        || CharacterSet.illegalCharacters.contains(scalar)
+                        || CharacterSet.nonBaseCharacters.contains(scalar)
+                        || CharacterSet.punctuationCharacters.contains(scalar)
+                        || CharacterSet.symbols.contains(scalar)
+                )
         }
     }
 }

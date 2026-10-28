@@ -48,13 +48,17 @@ public struct LanguagePair: Codable, Hashable, Sendable {
     ///
     /// When a language pair is idempotent, ``TranslationService`` returns the
     /// original input unchanged without performing a network request.
-    public var isIdempotent: Bool { from == to }
+    public var isIdempotent: Bool {
+        from == to
+    }
 
     /// A hyphenated string representation of the language pair.
     ///
     /// The format is `"from-to"` – for example, `"en-fr"` for English to
     /// French.
-    public var string: String { "\(from)-\(to)" }
+    public var string: String {
+        "\(from)-\(to)"
+    }
 
     // MARK: - Init
 
