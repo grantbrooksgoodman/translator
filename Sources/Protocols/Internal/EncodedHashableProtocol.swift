@@ -14,10 +14,8 @@ protocol EncodedHashable {
 
 extension EncodedHashable {
     var encodedHash: String {
-        let jsonEncoder = JSONEncoder()
-
         do {
-            return try jsonEncoder.encode(hashFactors).encodedHash
+            return try JSONEncoder().encode(hashFactors).encodedHash
         } catch {
             return Data().encodedHash
         }

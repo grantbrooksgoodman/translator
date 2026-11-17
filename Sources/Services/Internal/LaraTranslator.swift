@@ -25,7 +25,7 @@ final class LaraTranslator: BaseTranslator, Translatorable {
     override func configureWebView() {
         // Inject a script into ALL frames (including cross-origin iframes).
         // When the iframe renders the translation, this script finds it and
-        // posts the result to the parent frame via postMessage.
+        // posts the result to the main frame via postMessage.
         let iframeScript = """
         (function() {
             if (window === window.top) return;
@@ -58,9 +58,13 @@ final class LaraTranslator: BaseTranslator, Translatorable {
 
     // MARK: - Evaluate JavaScript
 
-    override func evaluateJavaScript(useAlternateString: Bool = false) async {
+    override func evaluateJavaScript(
+        useAlternateString: Bool = false
+    ) async {
         guard let translationInput,
-              let translationLanguagePair else { return failForMissingValues() }
+              let translationLanguagePair else {
+            return failForMissingValues()
+        }
 
         // The result observer script (injected at document start) listens for
         // the iframe's postMessage and buffers it on the main frame's window.
@@ -88,7 +92,9 @@ final class LaraTranslator: BaseTranslator, Translatorable {
                 javaScript,
                 contentWorld: .page
             ) as? String,
-                !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty else {
+                !translationOutput
+                .lowercasedTrimmingWhitespaceAndNewlines
+                .isEmpty else {
                 return setTranslationResult(.failure(
                     .evaluateJavaScriptFailed()
                 ))

@@ -114,7 +114,9 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
         }
 
         let translationOutput = translations.joined()
-        guard !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty else {
+        guard !translationOutput
+            .lowercasedTrimmingWhitespaceAndNewlines
+            .isEmpty else {
             throw TranslationError.malformedTranslationResult
         }
 
@@ -127,7 +129,9 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
     // MARK: - Evaluate JavaScript
 
-    override func evaluateJavaScript(useAlternateString: Bool = false) async {
+    override func evaluateJavaScript(
+        useAlternateString: Bool = false
+    ) async {
         if await restoreLanguagePairIfNeeded() {
             return await retryOrFail(
                 .evaluateJavaScriptFailed(),
@@ -137,12 +141,16 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
         do {
             guard let translationInput,
-                  let translationLanguagePair else { return failForMissingValues() }
+                  let translationLanguagePair else {
+                return failForMissingValues()
+            }
 
             let javaScriptString = useAlternateString ? platform.alternateJavaScriptString : platform.javaScriptString
 
             guard let translationOutput = try await webView?.evaluateJavaScript(javaScriptString) as? String,
-                  !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty,
+                  !translationOutput
+                  .lowercasedTrimmingWhitespaceAndNewlines
+                  .isEmpty,
                   translationOutput.lowercasedTrimmingWhitespaceAndNewlines != "!" else {
                 return await retryOrFail(
                     .evaluateJavaScriptFailed(),
@@ -151,7 +159,10 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
             }
 
             let inputNewlineCount = translationInput.value.components(separatedBy: "\n").count
-            let outputComponents = translationOutput.trimmingBorderedNewlines.components(separatedBy: "\n")
+            let outputComponents = translationOutput
+                .trimmingBorderedNewlines
+                .components(separatedBy: "\n")
+
             let outputNewlineCount = outputComponents.count
 
             guard outputNewlineCount >= inputNewlineCount,
@@ -190,8 +201,13 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
     private func process(_ string: String) -> String {
         let seeMore = "See more translations"
-        guard string.contains(seeMore) else { return string }
-        return string.components(separatedBy: seeMore)[0].trimmingBorderedNewlines
+        guard string.contains(seeMore) else {
+            return string
+        }
+
+        return string
+            .components(separatedBy: seeMore)[0]
+            .trimmingBorderedNewlines
     }
 
     /// - Returns: Boolean value indicating whether or not the language pair needed restoring.
@@ -203,10 +219,19 @@ final class ReversoTranslator: BaseTranslator, Translatorable {
 
     /// Necessary to avoid async/await here due to crashing bug in evaluating JavaScript with no return values.
     /// https://forums.developer.apple.com/forums/thread/701553
-    private func restoreLanguagePairIfNeeded(completion: @escaping @Sendable (Bool) -> Void) {
-        webView?.evaluateJavaScript("document.getElementsByClassName('original-language-pair-link')[0].click();") { _, error in
-            guard error == nil else { return completion(false) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) { completion(true) }
+    private func restoreLanguagePairIfNeeded(
+        completion: @escaping @Sendable (Bool) -> Void
+    ) {
+        webView?.evaluateJavaScript(
+            "document.getElementsByClassName('original-language-pair-link')[0].click();"
+        ) { _, error in
+            guard error == nil else {
+                return completion(false)
+            }
+
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + .milliseconds(500)
+            ) { completion(true) }
         }
     }
 }

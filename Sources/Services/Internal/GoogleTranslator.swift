@@ -68,7 +68,9 @@ final class GoogleTranslator: BaseTranslator, Translatorable {
 
         guard let source = platform.identifier(for: languagePair.from),
               let target = platform.identifier(for: languagePair.to),
-              let encodedText = input.value.addingPercentEncoding(withAllowedCharacters: allowedCharacters),
+              let encodedText = input
+              .value
+              .addingPercentEncoding(withAllowedCharacters: allowedCharacters),
               var urlComponents = URLComponents(string: Self.apiBaseURLString) else {
             throw TranslationError.failedToGenerateRequestURL
         }
@@ -99,7 +101,9 @@ final class GoogleTranslator: BaseTranslator, Translatorable {
             .compactMap { ($0 as? [Any])?.first as? String }
             .joined()
 
-        guard !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty else {
+        guard !translationOutput
+            .lowercasedTrimmingWhitespaceAndNewlines
+            .isEmpty else {
             throw TranslationError.malformedTranslationResult
         }
 
@@ -112,15 +116,21 @@ final class GoogleTranslator: BaseTranslator, Translatorable {
 
     // MARK: - Evaluate JavaScript
 
-    override func evaluateJavaScript(useAlternateString: Bool = false) async {
+    override func evaluateJavaScript(
+        useAlternateString: Bool = false
+    ) async {
         do {
             guard let translationInput,
-                  let translationLanguagePair else { return failForMissingValues() }
+                  let translationLanguagePair else {
+                return failForMissingValues()
+            }
 
             let javaScriptString = useAlternateString ? platform.alternateJavaScriptString : platform.javaScriptString
 
             guard let translationOutput = try await webView?.evaluateJavaScript(javaScriptString) as? String,
-                  !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty,
+                  !translationOutput
+                  .lowercasedTrimmingWhitespaceAndNewlines
+                  .isEmpty,
                   !translationOutput.contains("(feminine)") else {
                 return await retryOrFail(
                     .evaluateJavaScriptFailed(),
@@ -131,7 +141,10 @@ final class GoogleTranslator: BaseTranslator, Translatorable {
             setTranslationResult(
                 .success(.init(
                     input: translationInput,
-                    output: translationOutput.replacingOccurrences(of: "(masculine)", with: ""),
+                    output: translationOutput.replacingOccurrences(
+                        of: "(masculine)",
+                        with: ""
+                    ),
                     languagePair: translationLanguagePair
                 ))
             )

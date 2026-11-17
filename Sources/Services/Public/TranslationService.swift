@@ -37,7 +37,7 @@ import Foundation
 ///
 /// - Important: All translation methods are asynchronous. Call them from an asynchronous context.
 public struct TranslationService: Sendable {
-    // MARK: - Type Aliases
+    // MARK: - Constants Accessors
 
     private typealias Strings = Constants.Strings.Core
 
@@ -49,35 +49,6 @@ public struct TranslationService: Sendable {
     // MARK: - Init
 
     private init() {}
-
-    // MARK: - Prewarm
-
-    /// Warms the underlying network connections to translation service hosts.
-    ///
-    /// Call this method early in the app lifecycle (e.g. at launch) to establish
-    /// DNS resolution and TLS sessions ahead of the first translation request.
-    /// This also precompiles the content-blocking rules used by the web view
-    /// pipeline, reducing latency on the first call to
-    /// ``translate(_:languagePair:)`` without retaining any web views or
-    /// accumulating cookies.
-    ///
-    /// ```swift
-    /// TranslationService.shared.prewarm()
-    /// ```
-    ///
-    /// - Parameter platforms: The platforms to prewarm connections for.
-    ///   Defaults to ``TranslationPlatform/allCases``.
-    @MainActor
-    public func prewarm(
-        _ platforms: [TranslationPlatform] = TranslationPlatform.allCases
-    ) {
-        BaseTranslator.prewarm(platforms)
-
-        // Decode and index the local archive ahead of the first lookup.
-        if Translator.config.archiverDelegate == nil {
-            LocalTranslationArchiver.shared.preload()
-        }
-    }
 
     // MARK: - Translate
 
@@ -163,7 +134,9 @@ public struct TranslationService: Sendable {
     ) async throws -> Translation {
         let input = input.withTokenizedDetectorAttributes
         guard input.isWellFormed,
-              languagePair.isWellFormed else { throw TranslationError.invalidArguments }
+              languagePair.isWellFormed else {
+            throw TranslationError.invalidArguments
+        }
 
         let translationArchiver = Translator.config.archiverDelegate ?? LocalTranslationArchiver.shared
 
@@ -184,7 +157,10 @@ public struct TranslationService: Sendable {
             inputValueEncodedHash: input.value.encodedHash,
             languagePair: languagePair
         ) ?? translationArchiver.getValue(
-            inputValueEncodedHash: input.value.trimmingTrailingWhitespaceAndNewlines.encodedHash,
+            inputValueEncodedHash: input
+                .value
+                .trimmingTrailingWhitespaceAndNewlines
+                .encodedHash,
             languagePair: languagePair
         ) {
             guard archivedTranslation.isWellFormed else {
@@ -221,7 +197,10 @@ public struct TranslationService: Sendable {
             )
         }
 
-        let inputTokens = input.value.tokenized(delimiter: Strings.processingDelimiter)
+        let inputTokens = input
+            .value
+            .tokenized(delimiter: Strings.processingDelimiter)
+
         let translation = try await platform.instance.translate(
             .init(inputTokens.processed.trimmingTrailingWhitespaceAndNewlines),
             languagePair: languagePair
@@ -234,9 +213,18 @@ public struct TranslationService: Sendable {
 
         let processedOutput = translation
             .output
-            .replacing(token: Strings.processingToken, with: inputTokens.slices)
-            .replacingOccurrences(of: Strings.processingToken, with: "")
-            .replacingOccurrences(of: Strings.processingDelimiter, with: "")
+            .replacing(
+                token: Strings.processingToken,
+                with: inputTokens.slices
+            )
+            .replacingOccurrences(
+                of: Strings.processingToken,
+                with: ""
+            )
+            .replacingOccurrences(
+                of: Strings.processingDelimiter,
+                with: ""
+            )
             .trimmingTrailingWhitespaceAndNewlines
             .capitalized(relativeTo: input.value)
 
@@ -269,7 +257,8 @@ public struct TranslationService: Sendable {
                 input,
                 languagePair: languagePair,
                 platform: platform
-            ), translation.output.normalized != input.value.normalized {
+            ),
+                translation.output.normalized != input.value.normalized {
                 return translation
             }
         }
@@ -324,7 +313,9 @@ public struct TranslationService: Sendable {
     ) async throws -> [Translation] {
         guard !inputs.isEmpty,
               inputs.allSatisfy(\.isWellFormed),
-              languagePair.isWellFormed else { throw TranslationError.invalidArguments }
+              languagePair.isWellFormed else {
+            throw TranslationError.invalidArguments
+        }
 
         // Pre-allocate result slots to preserve order.
         var translations: [Translation?] = Array(

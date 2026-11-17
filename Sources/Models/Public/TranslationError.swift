@@ -33,7 +33,7 @@ public enum TranslationError: LocalizedError {
     /// JavaScript evaluation on the translation platform's web page failed.
     ///
     /// The associated value, when present, contains a description of the
-    /// underlying JavaScript error.
+    /// failure.
     case evaluateJavaScriptFailed(String? = nil)
 
     /// The service was unable to construct a valid request URL for the

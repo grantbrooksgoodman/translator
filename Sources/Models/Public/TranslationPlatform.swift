@@ -38,7 +38,7 @@ import Foundation
 ///   not support the requested language pair, the translation fails with
 ///   ``TranslationError/failedToGenerateRequestURL``.
 public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
-    // MARK: - Type Aliases
+    // MARK: - Constants Accessors
 
     private typealias Strings = Constants.Strings.TranslationPlatform
 
@@ -245,7 +245,8 @@ public enum TranslationPlatform: Codable, CaseIterable, Equatable, Sendable {
     ) -> URL? {
         guard let source = identifier(for: languagePair.from),
               let target = identifier(for: languagePair.to),
-              let text = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+              let text = text
+              .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
 
         let urlString = switch self {
         case .deepL:

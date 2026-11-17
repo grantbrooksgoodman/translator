@@ -7,11 +7,14 @@
 
 /* Native */
 import Foundation
-
 @preconcurrency import WebKit
 
 @MainActor
 class BaseTranslator: NSObject {
+    // MARK: - Constants Accessors
+
+    private typealias Strings = Constants.Strings.Core
+
     // MARK: - Properties
 
     private(set) var translationInput: TranslationInput?
@@ -43,25 +46,28 @@ class BaseTranslator: NSObject {
 
     // MARK: - Init
 
-    init(
-        platform: TranslationPlatform
-    ) {
+    init(platform: TranslationPlatform) {
         self.platform = platform
     }
 
     // MARK: - Prewarm
 
-    static func prewarm(
-        _ platforms: [TranslationPlatform]
-    ) {
+    static func prewarm(_ platforms: [TranslationPlatform]) {
         // Compile content rule lists ahead of time so the first translation
         // doesn't pay the compilation cost.
         precompileContentRuleLists()
 
         // Warm the DNS + TLS sessions for the translation API fast paths.
         var apiWarmupURLStrings = [String]()
-        if platforms.contains(.google) { apiWarmupURLStrings.append(GoogleTranslator.apiWarmupURLString) }
-        if platforms.contains(.reverso) { apiWarmupURLStrings.append(ReversoTranslator.apiWarmupURLString) }
+        if platforms.contains(.google) {
+            apiWarmupURLStrings
+                .append(GoogleTranslator.apiWarmupURLString)
+        }
+
+        if platforms.contains(.reverso) {
+            apiWarmupURLStrings
+                .append(ReversoTranslator.apiWarmupURLString)
+        }
 
         for apiWarmupURL in apiWarmupURLStrings.compactMap({ URL(string: $0) }) {
             URLSession.shared.dataTask(with: apiWarmupURL).resume()
@@ -110,7 +116,9 @@ class BaseTranslator: NSObject {
         guard let requestURL = platform.requestURL(
             input.value,
             languagePair: languagePair
-        ) else { return completion(.failure(.failedToGenerateRequestURL)) }
+        ) else {
+            return completion(.failure(.failedToGenerateRequestURL))
+        }
 
         translationInput = input
         translationLanguagePair = languagePair
@@ -136,12 +144,16 @@ class BaseTranslator: NSObject {
     ) async {
         do {
             guard let translationInput,
-                  let translationLanguagePair else { return failForMissingValues() }
+                  let translationLanguagePair else {
+                return failForMissingValues()
+            }
 
             let javaScriptString = useAlternateString ? platform.alternateJavaScriptString : platform.javaScriptString
 
             guard let translationOutput = try await webView?.evaluateJavaScript(javaScriptString) as? String,
-                  !translationOutput.lowercasedTrimmingWhitespaceAndNewlines.isEmpty else {
+                  !translationOutput
+                  .lowercasedTrimmingWhitespaceAndNewlines
+                  .isEmpty else {
                 return await retryOrFail(
                     .evaluateJavaScriptFailed(),
                     useAlternateString: !useAlternateString
@@ -178,8 +190,97 @@ class BaseTranslator: NSObject {
 
     // MARK: - Auxiliary
 
+    private func didSetTranslationResult() {
+        Task {
+            self.didStartEvaluation = false
+            self.navigationFinishedDate = nil
+            self.timeout = nil
+            self.translationInput = nil
+            self.translationLanguagePair = nil
+            self.webView?
+                .configuration
+                .userContentController
+                .removeScriptMessageHandler(
+                    forName: Strings.resultObserverMessageHandlerName
+                )
+
+            self.webView?.removeFromSuperview()
+            self.webView = nil
+            self.translationResult = nil
+        }
+    }
+
     func failForMissingValues() {
         setTranslationResult(.failure(.evaluateJavaScriptFailed("Missing required parameters.")))
+    }
+
+    private func getDidReachEvaluationThreshold() -> Bool {
+        guard let navigationFinishedDate,
+              let elapsedSeconds = Calendar.current.dateComponents(
+                  [.second],
+                  from: navigationFinishedDate,
+                  to: .now
+              ).second else { return false }
+
+        return elapsedSeconds >= 10
+    }
+
+    private func initializeWebView() {
+        // Share only the data store; per-translation user scripts and message
+        // handlers require a fresh configuration and content controller.
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = Self.websiteDataStore
+
+        webView = .init(
+            frame: .init(
+                origin: .zero,
+                size: .init(
+                    width: UIApplication.shared.mainScreen.bounds.width,
+                    height: UIApplication.shared.mainScreen.bounds.height
+                )
+            ),
+            configuration: configuration
+        )
+
+        guard let webView else { return }
+        webView.alpha = 0
+        webView.isUserInteractionEnabled = false
+        webView.navigationDelegate = self
+
+        webView
+            .configuration
+            .preferences
+            .javaScriptCanOpenWindowsAutomatically = false
+
+        addBlockContentFocusScript()
+        addContentSecurityPolicyScript()
+        addDenyPermissionsScript()
+        addDisableAnimationsScript()
+        addDisableServiceWorkerScript()
+        addFauxVisibilityScript()
+        addPromoteIdleCallbackScript()
+
+        if let resultObserverScript = platform.resultObserverScript {
+            webView
+                .configuration
+                .userContentController
+                .addUserScript(.init(
+                    source: resultObserverScript,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                ))
+
+            webView.configuration.userContentController.add(
+                WeakScriptMessageHandler(delegate: self),
+                name: Strings.resultObserverMessageHandlerName
+            )
+        }
+
+        enableBlockThirdPartyCookiesRule()
+        enableNoImagesRule()
+        enableNoFontsRule()
+
+        UIApplication.shared.keyWindow?.addSubview(webView)
     }
 
     func retryOrFail(
@@ -209,211 +310,6 @@ class BaseTranslator: NSObject {
         self.completion = nil
         self.translationResult = translationResult
         completion(translationResult)
-    }
-
-    private func didSetTranslationResult() {
-        Task {
-            self.didStartEvaluation = false
-            self.navigationFinishedDate = nil
-            self.timeout = nil
-            self.translationInput = nil
-            self.translationLanguagePair = nil
-            self.webView?.configuration.userContentController.removeScriptMessageHandler(
-                forName: Constants.Strings.Core.resultObserverMessageHandlerName
-            )
-
-            self.webView?.removeFromSuperview()
-            self.webView = nil
-            self.translationResult = nil
-        }
-    }
-
-    private func getDidReachEvaluationThreshold() -> Bool {
-        guard let navigationFinishedDate,
-              let elapsedSeconds = Calendar.current.dateComponents(
-                  [.second],
-                  from: navigationFinishedDate,
-                  to: .now
-              ).second else { return false }
-        return elapsedSeconds >= 10
-    }
-
-    private func initializeWebView() {
-        // Share only the data store; per-translation user scripts and message
-        // handlers require a fresh configuration and content controller.
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = Self.websiteDataStore
-
-        webView = .init(
-            frame: .init(
-                origin: .zero,
-                size: .init(
-                    width: UIApplication.shared.mainScreen.bounds.width,
-                    height: UIApplication.shared.mainScreen.bounds.height
-                )
-            ),
-            configuration: configuration
-        )
-
-        guard let webView else { return }
-        webView.alpha = 0
-        webView.isUserInteractionEnabled = false
-        webView.navigationDelegate = self
-
-        webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-
-        addBlockContentFocusScript()
-        addContentSecurityPolicyScript()
-        addDenyPermissionsScript()
-        addDisableAnimationsScript()
-        addDisableServiceWorkerScript()
-        addFauxVisibilityScript()
-        addPromoteIdleCallbackScript()
-
-        if let resultObserverScript = platform.resultObserverScript {
-            webView.configuration.userContentController.addUserScript(.init(
-                source: resultObserverScript,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            ))
-
-            webView.configuration.userContentController.add(
-                WeakScriptMessageHandler(delegate: self),
-                name: Constants.Strings.Core.resultObserverMessageHandlerName
-            )
-        }
-
-        enableBlockThirdPartyCookiesRule()
-        enableNoImagesRule()
-        enableNoFontsRule()
-
-        UIApplication.shared.keyWindow?.addSubview(webView)
-    }
-}
-
-extension BaseTranslator: WKNavigationDelegate {
-    // MARK: - Create Web View with Configuration
-
-    func webView(
-        _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
-    ) -> WKWebView? {
-        nil
-    }
-
-    // MARK: - Dedice Policy for Navigation Response
-
-    func webView(
-        _ webView: WKWebView,
-        decidePolicyFor navigationResponse: WKNavigationResponse,
-        decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void
-    ) {
-        // Only ever allow HTML/text; cancel images, gifs, pdfs, etc.
-        let mimeType = navigationResponse.response.mimeType?.lowercased() ?? ""
-        let allowedTypes = mimeType.contains("text/html") || mimeType.contains("application/xhtml+xml")
-        decisionHandler(allowedTypes ? .allow : .cancel)
-    }
-
-    // MARK: - Did Fail Navigation
-
-    func webView(
-        _ webView: WKWebView,
-        didFail navigation: WKNavigation!,
-        withError error: any Error
-    ) {
-        Translator.config.loggerDelegate?.log(
-            "Web view failed navigation: \(Translator.descriptor(error))",
-            sender: self,
-            fileName: #fileID,
-            function: #function,
-            line: #line
-        )
-
-        setTranslationResult(.failure(
-            .webViewNavigationFailed(Translator.descriptor(error))
-        ))
-    }
-
-    // MARK: - Did Fail Provisional Navigation
-
-    func webView(
-        _ webView: WKWebView,
-        didFailProvisionalNavigation navigation: WKNavigation!,
-        withError error: any Error
-    ) {
-        Translator.config.loggerDelegate?.log(
-            "Web view failed provisional navigation: \(Translator.descriptor(error))",
-            sender: self,
-            fileName: #fileID,
-            function: #function,
-            line: #line
-        )
-
-        setTranslationResult(.failure(
-            .webViewNavigationFailed(Translator.descriptor(error))
-        ))
-    }
-
-    // MARK: - Did Finish Navigation
-
-    func webView(
-        _ webView: WKWebView,
-        didFinish navigation: WKNavigation!
-    ) {
-        typealias Strings = Constants.Strings.Core
-
-        Translator.config.loggerDelegate?.log(
-            "Web view finished navigation.",
-            sender: self,
-            fileName: #fileID,
-            function: #function,
-            line: #line
-        )
-
-        // Click to agree to cookie settings.
-        guard !webView.url!.absoluteString.hasPrefix(Strings.googleConsentURLString) else {
-            return webView.evaluateJavaScript(Strings.googleConsentJavaScriptString)
-        }
-
-        beginEvaluatingTranslationResult()
-    }
-
-    // MARK: - Did Receive Challenge
-
-    func webView(
-        _ webView: WKWebView,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard let serverTrust = challenge.protectionSpace.serverTrust else { return completionHandler(.useCredential, nil) }
-
-        let urlCredential: URLCredential = .init(trust: serverTrust)
-        completionHandler(
-            .useCredential,
-            urlCredential
-        )
-    }
-
-    // MARK: - Navigation Action Did Become Download
-
-    func webView(
-        _ webView: WKWebView,
-        navigationAction: WKNavigationAction,
-        didBecome download: WKDownload
-    ) {
-        download.cancel()
-    }
-
-    // MARK: - Navigation Response Did Become Download
-
-    func webView(
-        _ webView: WKWebView,
-        navigationResponse: WKNavigationResponse,
-        didBecome download: WKDownload
-    ) {
-        download.cancel()
     }
 }
 
@@ -462,7 +358,7 @@ extension BaseTranslator: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Constants.Strings.Core.resultObserverMessageHandlerName,
+        guard message.name == Strings.resultObserverMessageHandlerName,
               translationResult == nil else { return }
         beginEvaluatingTranslationResult()
     }

@@ -35,7 +35,7 @@ Translator coordinates between Google Translate, DeepL, Lara, and Reverso to pro
 | [`TranslationService`](Sources/Services/Public/TranslationService.swift) | The primary interface for translating text. |
 | [`LanguageRecognitionService`](Sources/Services/Public/LanguageRecognitionService.swift) | Evaluates the likelihood that a string belongs to a given language. |
 | [`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift) | The default on-device cache for completed translations. |
-| [`Translator.Config`](Sources/Translator.swift#L26) | The central configuration point for registering custom delegates. |
+| [`Translator.Config`](Sources/Translator.swift) | The central configuration point for registering custom delegates. |
 
 ---
 
@@ -185,7 +185,7 @@ An error that occurs during a translation operation. [`TranslationError`](Source
 
 ### Custom Translation Caching
 
-By default, [`TranslationService`](Sources/Services/Public/TranslationService.swift) caches translations using `LocalTranslationArchiver`, which stores them in `UserDefaults`. To provide a custom caching strategy, create a type that conforms to [`TranslationArchiverDelegate`](Sources/Protocols/Public/TranslationArchiverDelegateProtocol.swift) and register it:
+By default, [`TranslationService`](Sources/Services/Public/TranslationService.swift) caches translations using [`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift), which stores them in `UserDefaults`. To provide a custom caching strategy, create a type that conforms to [`TranslationArchiverDelegate`](Sources/Protocols/Public/TranslationArchiverDelegateProtocol.swift) and register it:
 
 ```swift
 final class DatabaseArchiver: TranslationArchiverDelegate {
@@ -235,7 +235,7 @@ When no logger is registered, diagnostic messages are silently discarded.
 
 Translator adopts Swift 6 strict concurrency. All public types conform to `Sendable`, and the primary interfaces are safe to use from any actor or task context:
 
-- [`TranslationService`](Sources/Services/Public/TranslationService.swift) is a `Sendable` structure. Its methods are asynchronous and safe to call from any context.
+- [`TranslationService`](Sources/Services/Public/TranslationService.swift) is a `Sendable` structure. Its translation methods are asynchronous and safe to call from any context. Call `prewarm(_:)` on the main actor.
 - [`LanguageRecognitionService`](Sources/Services/Public/LanguageRecognitionService.swift) is an actor. Access its methods with `await`.
 - [`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift) uses internal locking and is safe to call from any thread.
 - [`Translator.Config`](Sources/Translator.swift) uses internal locking. Delegate registration and access are safe from any thread.

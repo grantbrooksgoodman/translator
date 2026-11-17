@@ -35,6 +35,10 @@ import Foundation
 ///   `Sendable`, making it safe to persist, compare, and pass across
 ///   concurrency boundaries.
 public struct TranslationInput: Codable, Hashable, Sendable {
+    // MARK: - Constants Accessors
+
+    private typealias Strings = Constants.Strings.Core
+
     // MARK: - Properties
 
     /// The original source text provided at initialization.
@@ -59,7 +63,6 @@ public struct TranslationInput: Codable, Hashable, Sendable {
     }
 
     var withTokenizedDetectorAttributes: TranslationInput {
-        typealias Strings = Constants.Strings.Core
         var stringValue = value
 
         let detectorType: NSTextCheckingResult.CheckingType = [
@@ -68,19 +71,35 @@ public struct TranslationInput: Codable, Hashable, Sendable {
             .phoneNumber,
         ]
 
-        guard let dataDetector = try? NSDataDetector(types: detectorType.rawValue) else { return self }
+        guard let dataDetector = try? NSDataDetector(types: detectorType.rawValue) else {
+            return self
+        }
 
-        for taggableString in dataDetector.matches(
-            in: stringValue,
-            range: .init(location: 0, length: stringValue.utf16.count)
-        ).compactMap({ Range($0.range, in: value) }).compactMap({ String(value[$0]) }) {
+        for taggableString in dataDetector
+            .matches(
+                in: stringValue,
+                range: .init(
+                    location: 0,
+                    length: stringValue.utf16.count
+                )
+            )
+            .compactMap({
+                Range(
+                    $0.range,
+                    in: value
+                )
+            })
+            .compactMap({ String(value[$0]) }) {
             stringValue = stringValue.replacingOccurrences(
                 of: taggableString,
                 with: "\(Strings.processingDelimiter)\(taggableString)\(Strings.processingDelimiter)"
             )
         }
 
-        guard stringValue != value else { return self }
+        guard stringValue != value else {
+            return self
+        }
+
         return .init(stringValue)
     }
 
@@ -93,7 +112,10 @@ public struct TranslationInput: Codable, Hashable, Sendable {
     ///   - original: The original source text.
     ///   - alternate: An optional replacement string to translate in place
     ///     of the original. Pass `nil` to translate the original directly.
-    public init(_ original: String, alternate: String?) {
+    public init(
+        _ original: String,
+        alternate: String?
+    ) {
         self.original = original
         self.alternate = alternate
     }
@@ -102,7 +124,10 @@ public struct TranslationInput: Codable, Hashable, Sendable {
     ///
     /// - Parameter original: The source text to translate.
     public init(_ original: String) {
-        self.init(original, alternate: nil)
+        self.init(
+            original,
+            alternate: nil
+        )
     }
 }
 

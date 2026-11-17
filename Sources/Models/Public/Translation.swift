@@ -70,9 +70,6 @@ extension Translation: Validatable {
     /// completed translation. Malformed translations are discarded and
     /// reported as ``TranslationError/malformedTranslationResult``.
     public var isWellFormed: Bool {
-        let isInputValid = input.isWellFormed
-        let isLanguagePairValid = languagePair.isWellFormed
-        let isOutputValid = TranslationInput(output).isWellFormed
-        return isInputValid && isLanguagePairValid && isOutputValid
+        input.isWellFormed && languagePair.isWellFormed && TranslationInput(output).isWellFormed
     }
 }

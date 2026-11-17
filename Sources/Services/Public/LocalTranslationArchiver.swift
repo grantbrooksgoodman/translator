@@ -40,7 +40,7 @@ import UIKit
 ///   consider implementing a custom archiver backed by a database or file-based
 ///   storage.
 public final class LocalTranslationArchiver: TranslationArchiverDelegate, @unchecked Sendable {
-    // MARK: - Type Aliases
+    // MARK: - Constants Accessors
 
     private typealias Floats = Constants.CGFloats.LocalTranslationArchiver
     private typealias Strings = Constants.Strings.LocalTranslationArchiver

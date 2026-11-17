@@ -26,12 +26,12 @@ import Foundation
 /// ```
 ///
 /// The ``isWellFormed`` property indicates whether both language codes are
-/// valid. A well-formed language pair contains exactly two non-blank
-/// characters in each code.
+/// valid. A language pair is well-formed when both ``from`` and
+/// ``to`` are non-blank strings of exactly two characters.
 ///
 /// - Important: Both ``from`` and ``to`` must be exactly two characters long
-///   to pass validation. Language codes that do not conform to ISO 639-1
-///   (for example, `"eng"` or `"french"`) cause the pair to fail validation.
+///   to pass validation. Codes of any other length (for example,
+///   `"eng"` or `"french"`) cause the pair to fail validation.
 public struct LanguagePair: Codable, Hashable, Sendable {
     // MARK: - Properties
 
@@ -67,7 +67,10 @@ public struct LanguagePair: Codable, Hashable, Sendable {
     /// - Parameters:
     ///   - from: The ISO 639-1 code of the source language.
     ///   - to: The ISO 639-1 code of the target language.
-    public init(from: String, to: String) {
+    public init(
+        from: String,
+        to: String
+    ) {
         self.from = from
         self.to = to
     }
@@ -79,8 +82,6 @@ public struct LanguagePair: Codable, Hashable, Sendable {
     /// component as both the source and target language, producing an
     /// idempotent pair.
     ///
-    /// Returns `nil` if the string is empty.
-    ///
     /// - Parameter string: A hyphenated language pair string to parse.
     public init?(_ string: String) {
         let components = string.components(separatedBy: "-")
@@ -88,12 +89,20 @@ public struct LanguagePair: Codable, Hashable, Sendable {
 
         let fromValue = components[0].lowercasedTrimmingWhitespaceAndNewlines
         guard components.count > 1 else {
-            self.init(from: fromValue, to: fromValue)
+            self.init(
+                from: fromValue,
+                to: fromValue
+            )
+
             return
         }
 
-        let toValue = components[1 ... components.count - 1].joined().lowercasedTrimmingWhitespaceAndNewlines
-        self.init(from: fromValue, to: toValue)
+        self.init(
+            from: fromValue,
+            to: components[1 ... components.count - 1]
+                .joined()
+                .lowercasedTrimmingWhitespaceAndNewlines
+        )
     }
 }
 
@@ -103,11 +112,9 @@ extension LanguagePair: Validatable {
     /// A language pair is well-formed when both ``from`` and ``to`` are
     /// non-blank strings of exactly two characters. Methods on
     /// ``TranslationService`` check this property before attempting a
-    /// translation and return ``TranslationError/invalidArguments`` when
+    /// translation and throw ``TranslationError/invalidArguments`` when
     /// it is `false`.
     public var isWellFormed: Bool {
-        let isFromValid = !from.isBlank && from.count == 2
-        let isToValid = !to.isBlank && to.count == 2
-        return isFromValid && isToValid
+        !from.isBlank && from.count == 2 && !to.isBlank && to.count == 2
     }
 }

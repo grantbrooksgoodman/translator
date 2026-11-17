@@ -9,6 +9,10 @@
 import Foundation
 
 extension String {
+    // MARK: - Constants Accessors
+
+    private typealias Strings = Constants.Strings.Core
+
     // MARK: - Properties
 
     var indexOfFirstLetter: Int? {
@@ -53,7 +57,10 @@ extension String {
     }
 
     private var trimmingNewlines: String {
-        replacingOccurrences(of: "\n", with: "")
+        replacingOccurrences(
+            of: "\n",
+            with: ""
+        )
     }
 
     private var trimmingTrailingWhitespace: String {
@@ -65,14 +72,23 @@ extension String {
     }
 
     private var trimmingWhitespace: String {
-        replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\u{00A0}", with: "")
+        replacingOccurrences(
+            of: " ",
+            with: ""
+        )
+        .replacingOccurrences(
+            of: "\u{00A0}",
+            with: ""
+        )
     }
 
     // MARK: - Methods
 
     func capitalized(relativeTo comparator: String) -> String {
         guard let indexOfFirstLetter,
-              indexOfFirstLetter == comparator.indexOfFirstLetter else { return self }
+              indexOfFirstLetter == comparator.indexOfFirstLetter else {
+            return self
+        }
 
         let firstLetterInComparator: Character = .init(comparator.map { String($0) }[indexOfFirstLetter])
         var selfComponents = map { String($0) }
@@ -86,31 +102,46 @@ extension String {
         return selfComponents.joined()
     }
 
-    func dropPrefix(_ dropping: Int = 1) -> String {
-        .init(suffix(from: index(startIndex, offsetBy: dropping)))
+    func dropPrefix(
+        _ dropping: Int = 1
+    ) -> String {
+        .init(suffix(from: index(
+            startIndex,
+            offsetBy: dropping
+        )))
     }
 
-    func dropSuffix(_ dropping: Int = 1) -> String {
+    func dropSuffix(
+        _ dropping: Int = 1
+    ) -> String {
         .init(prefix(count - dropping))
     }
 
-    func replacing(token: String, with slices: [String]) -> String {
+    func replacing(
+        token: String,
+        with slices: [String]
+    ) -> String {
         let components = components(separatedBy: token)
         var result = ""
 
         guard components.count - 1 > 0,
-              slices.count == components.count - 1 else { return self }
+              slices.count == components.count - 1 else {
+            return self
+        }
 
         for (index, component) in components[0 ... components.count - 2].enumerated() {
-            result += (component + slices[index].replacingOccurrences(of: token, with: ""))
+            result += (component + slices[index].replacingOccurrences(
+                of: token,
+                with: ""
+            ))
         }
 
         return result + (components.last ?? "")
     }
 
-    func tokenized(delimiter: String) -> (processed: String, slices: [String]) {
-        typealias Strings = Constants.Strings.Core
-
+    func tokenized(
+        delimiter: String
+    ) -> (processed: String, slices: [String]) {
         let components = components(separatedBy: delimiter)
         let extractedTokens = stride(
             from: 0,
@@ -127,7 +158,11 @@ extension String {
         for token in extractedTokens {
             let canonizedToken = "\(delimiter)\(token)\(delimiter)"
             if extractedTokens.unique.count == extractedTokens.count {
-                guard (processedString.components(separatedBy: canonizedToken).count - 1) > 0 else { continue }
+                guard (
+                    processedString
+                        .components(separatedBy: canonizedToken)
+                        .count - 1
+                ) > 0 else { continue }
             }
 
             guard canonizedToken != "\(delimiter)\(delimiter)" else { continue }

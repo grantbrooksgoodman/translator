@@ -30,8 +30,9 @@ public extension String {
     ///
     /// ``TranslationService`` uses this property to determine whether
     /// the input contains translatable content. Strings composed
-    /// entirely of numbers, punctuation, or whitespace return `false`
-    /// and are returned unchanged without a network request.
+    /// entirely of numbers, punctuation, or whitespace return `false`.
+    /// If the input and language pair pass validation, the service
+    /// returns such a string unchanged without a network request.
     var containsLetters: Bool {
         unicodeScalars.contains { scalar in
             CharacterSet.letters.contains(scalar)

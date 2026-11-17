@@ -36,8 +36,8 @@ public actor LanguageRecognitionService {
     // MARK: - Types
 
     private struct CacheKey: Hashable {
-        let string: String
         let languageCode: String
+        let string: String
     }
 
     // MARK: - Properties
@@ -89,8 +89,8 @@ public actor LanguageRecognitionService {
         inLanguage languageCode: String
     ) async -> Float {
         let cacheKey = CacheKey(
-            string: string,
-            languageCode: languageCode
+            languageCode: languageCode,
+            string: string
         )
 
         if let cachedValue = cachedResults[cacheKey] {
@@ -106,12 +106,14 @@ public actor LanguageRecognitionService {
         languageRecognizer.processString(string)
 
         if let dominantLanguageCode = languageRecognizer.dominantLanguage?.rawValue,
-           sanitized(dominantLanguageCode).hasPrefix(sanitized(languageCode)) {
+           sanitized(dominantLanguageCode)
+           .hasPrefix(sanitized(languageCode)) {
             confidenceValue += 0.4
         }
 
         if let dominantHypothesis = languageRecognizer.languageHypotheses(withMaximum: 1).first,
-           sanitized(dominantHypothesis.key.rawValue).hasPrefix(sanitized(languageCode)),
+           sanitized(dominantHypothesis.key.rawValue)
+           .hasPrefix(sanitized(languageCode)),
            dominantHypothesis.value >= 0.45 {
             confidenceValue += 0.4
         }
@@ -127,6 +129,8 @@ public actor LanguageRecognitionService {
         return confidenceValue
     }
 
+    // MARK: - Auxiliary
+
     @MainActor
     private func isValidSentence(
         _ string: String,
@@ -135,7 +139,10 @@ public actor LanguageRecognitionService {
         func isMisspelled(_ word: String) -> Bool {
             UITextChecker().rangeOfMisspelledWord(
                 in: word,
-                range: .init(location: 0, length: word.utf16.count),
+                range: .init(
+                    location: 0,
+                    length: word.utf16.count
+                ),
                 startingAt: 0,
                 wrap: false,
                 language: languageCode
@@ -159,8 +166,7 @@ public actor LanguageRecognitionService {
         for token in splitString where shouldCheck(token) {
             checkedWords += 1
 
-            let word = String(token)
-            switch isMisspelled(word) {
+            switch isMisspelled(String(token)) {
             case true: misspelledWords += 1
             case false: validWords += 1
             }

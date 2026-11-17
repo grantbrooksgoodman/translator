@@ -5,12 +5,8 @@
 //  Copyright © NEOTechnica Corporation. All rights reserved.
 //
 
-// swiftlint:disable identifier_name line_length
-
 /* Native */
 import Foundation
-
-// MARK: - Translator
 
 /// The top-level namespace for the Translator framework.
 ///
@@ -33,7 +29,11 @@ public enum Translator {
 }
 
 public extension Translator {
-    /* MARK: Types */
+    // MARK: - Constants Accessors
+
+    private typealias Strings = Constants.Strings.Core
+
+    // MARK: - Types
 
     /// The configuration object for the Translator framework.
     ///
@@ -137,75 +137,22 @@ public extension Translator {
         }
     }
 
-    /* MARK: Methods */
+    // MARK: - Methods
 
     internal static func descriptor(_ error: Error) -> String {
         func descriptor(_ error: NSError) -> String {
             "\(error.localizedDescription) (\(error.code))"
         }
 
-        typealias Strings = Constants.Strings.Core
-
         guard let userInfo = error._userInfo as? NSDictionary,
               let errorMessage = userInfo[
                   Strings.javaScriptExceptionMessageErrorUserInfoKey
               ] as? String ?? userInfo[
                   Strings.nsHelpAnchorErrorUserInfoKey
-              ] as? String else { return descriptor(error as NSError) }
+              ] as? String else {
+            return descriptor(error as NSError)
+        }
 
         return "\(errorMessage) (\((error as NSError).code))"
     }
 }
-
-// MARK: - Constants
-
-enum Constants {
-    // MARK: - CGFloat
-
-    enum CGFloats {
-        /* MARK: LocalTranslationArchiver */
-
-        enum LocalTranslationArchiver {
-            static let writeDelayMilliseconds: CGFloat = 1000
-        }
-    }
-
-    // MARK: - String
-
-    enum Strings {
-        /* MARK: Core */
-
-        enum Core {
-            static let googleConsentJavaScriptString = "document.getElementsByClassName('VfPpkd-RLmnJb')[3].click();"
-            static let googleConsentURLString = "https://consent.google.com/"
-            static let javaScriptExceptionMessageErrorUserInfoKey = "WKJavaScriptExceptionMessage"
-            static let nsHelpAnchorErrorUserInfoKey = "NSHelpAnchor"
-            static let processingDelimiter = "⌘"
-            static let processingToken = "⁂"
-            static let resultObserverMessageHandlerName = "translatorResultObserver"
-        }
-
-        /* MARK: LocalTranslationArchiver */
-
-        enum LocalTranslationArchiver {
-            static let archiveUserDefaultsKey = "translationArchive"
-        }
-
-        /* MARK: TranslationPlatform */
-
-        enum TranslationPlatform {
-            static let deepLJavaScriptString = "var result = document.querySelectorAll('[aria-labelledby=\"translation-results-heading\"]'); result[result.length - 1].innerText;"
-            static let deepLAlternateJavaScriptString = "var result = document.querySelectorAll('[aria-labelledby=\"translation-target-heading\"]'); result[result.length - 1].innerText;"
-
-            static let googleJavaScriptString = "document.getElementsByClassName('lRu31')[0].innerText;"
-            static let googleAlternateJavaScriptString = "document.getElementsByClassName('lRu31')[1].innerText;"
-
-            static let laraJavaScriptString = "document.getElementsByClassName('knownFragmentElementNode')[0].innerText;"
-
-            static let reversoJavaScriptString = "document.getElementsByClassName('textarea translation-box__translated-text translation-box__translated-text_favorite')[0].innerText;"
-            static let reversoAlternateJavaScriptString = "document.getElementsByClassName('translation-input__main translation-input__result')[0].innerText;"
-        }
-    }
-}
-
-// swiftlint:enable identifier_name line_length
