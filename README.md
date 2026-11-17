@@ -185,7 +185,7 @@ An error that occurs during a translation operation. [`TranslationError`](Source
 
 ### Custom Translation Caching
 
-By default, [`TranslationService`](Sources/Services/Public/TranslationService.swift) caches translations using `LocalTranslationArchiver`, which stores them in `UserDefaults`. To provide a custom caching strategy, create a type that conforms to [`TranslationArchiverDelegate`](Sources/Protocols/Public/TranslationArchiverDelegateProtocol.swift) and register it:
+By default, [`TranslationService`](Sources/Services/Public/TranslationService.swift) caches translations using [`LocalTranslationArchiver`](Sources/Services/Public/LocalTranslationArchiver.swift), which stores them in `UserDefaults`. To provide a custom caching strategy, create a type that conforms to [`TranslationArchiverDelegate`](Sources/Protocols/Public/TranslationArchiverDelegateProtocol.swift) and register it:
 
 ```swift
 final class DatabaseArchiver: TranslationArchiverDelegate {
